@@ -25,3 +25,17 @@ export interface AIProvider {
   generate(options: GenerateOptions): Promise<string>
   stream?(options: GenerateOptions): AsyncGenerator<string>
 }
+
+export class ProviderConfigurationError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ProviderConfigurationError'
+  }
+}
+
+export class ProviderResponseError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ProviderResponseError'
+  }
+}

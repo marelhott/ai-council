@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { createProvider, createProviderFor, AVAILABLE_PROVIDERS, type RoleConfig } from './providers/index'
 import { fetchLiveModels } from './liveModels'
-import type { APIKeys } from './providers/interface'
+import { ProviderConfigurationError, ProviderResponseError, type APIKeys } from './providers/interface'
 
 const app = express()
 app.use(express.json())
@@ -13,6 +13,15 @@ function readApiKeys(body: unknown): APIKeys | undefined {
   const value = body as { apiKeys?: APIKeys } | undefined
   if (!value?.apiKeys) return undefined
   return value.apiKeys
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message
+  return 'Generování se nezdařilo.'
+}
+
+function errorStatus(error: unknown): number {
+  return error instanceof ProviderConfigurationError ? 400 : 500
 }
 
 // ---- Providers & live models ----
@@ -37,8 +46,12 @@ app.post('/api/models', async (req, res) => {
 })
 
 app.get('/api/health', (_req, res) => {
-  const defaultProvider = createProvider()
-  res.json({ ok: true, provider: defaultProvider.name, model: defaultProvider.model })
+  try {
+    const defaultProvider = createProvider()
+    res.json({ ok: true, provider: defaultProvider.name, model: defaultProvider.model })
+  } catch (error) {
+    res.status(errorStatus(error)).json({ ok: false, error: errorMessage(error) })
+  }
 })
 
 // ---- Pure chat (no system prompt, no roles) ----
@@ -60,7 +73,7 @@ app.post('/api/pure-chat', async (req, res) => {
     res.json({ content, providerName: p.name, modelName: modelConfig.model })
   } catch (err) {
     console.error('pure-chat error:', err)
-    res.status(500).json({ error: 'Generování se nezdařilo' })
+    res.status(errorStatus(err)).json({ error: errorMessage(err) })
   }
 })
 
@@ -110,7 +123,7 @@ app.post('/api/weakest-assumption', async (req, res) => {
     res.json(result)
   } catch (err) {
     console.error('weakest-assumption error:', err)
-    res.status(500).json({ error: 'Generování se nezdařilo' })
+    res.status(errorStatus(err)).json({ error: errorMessage(err) })
   }
 })
 
@@ -166,8 +179,15 @@ app.post('/api/three-answers', async (req, res) => {
       return { roleName: role, roleLabel: roleLabels[role], providerName: r.value.providerName, modelName: r.value.modelName, content: r.value.content, status: 'done', error: null }
     }
     const cfg = roleConfigs?.[role]
-    const fallbackProvider = cfg ? createProviderFor(cfg, readApiKeys(req.body)) : createProvider(readApiKeys(req.body))
-    return { roleName: role, roleLabel: roleLabels[role], providerName: fallbackProvider.name, modelName: cfg?.model ?? fallbackProvider.model, content: '', status: 'error', error: 'Tato odpověď se nepodařila vygenerovat.' }
+    return {
+      roleName: role,
+      roleLabel: roleLabels[role],
+      providerName: cfg?.provider ?? 'unknown',
+      modelName: cfg?.model ?? '',
+      content: '',
+      status: 'error',
+      error: errorMessage(r.reason),
+    }
   })
 
   res.json({ responses })
@@ -241,10 +261,11 @@ app.post('/api/council', async (req, res) => {
       return {
         roleName: key,
         roleLabel: config.label,
-        providerName: r.status === 'fulfilled' ? r.value.providerName : fallback.name,
+        providerName: r.status === 'fulfilled' ? r.value.providerName : (cfg?.provider ?? fallback.name),
         modelName: r.status === 'fulfilled' ? r.value.modelName : (cfg?.model ?? fallback.model),
         content: r.status === 'fulfilled' ? r.value.content : '',
         status: r.status === 'fulfilled' ? 'done' : 'error',
+        error: r.status === 'fulfilled' ? null : errorMessage(r.reason),
       }
     })
 

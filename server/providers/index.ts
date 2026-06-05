@@ -1,5 +1,4 @@
-import type { AIProvider, APIKeys } from './interface'
-import { MockProvider } from './mock'
+import { ProviderConfigurationError, type AIProvider, type APIKeys } from './interface'
 import { AnthropicProvider, ANTHROPIC_MODELS } from './anthropic'
 import { OpenAIProvider, OPENAI_MODELS } from './openai'
 import { GeminiProvider, GEMINI_MODELS } from './gemini'
@@ -21,7 +20,7 @@ export function createProvider(apiKeys?: APIKeys): AIProvider {
   if (hasKey(apiKeys?.openai) || process.env.OPENAI_API_KEY) return new OpenAIProvider(undefined, apiKeys)
   if (hasKey(apiKeys?.anthropic) || process.env.ANTHROPIC_API_KEY) return new AnthropicProvider(undefined, apiKeys)
   if (hasKey(apiKeys?.gemini) || process.env.GEMINI_API_KEY) return new GeminiProvider(undefined, apiKeys)
-  return new MockProvider()
+  throw new ProviderConfigurationError('Není nastaven žádný API klíč. Doplň OpenAI, Claude nebo Gemini v nastavení nebo ve Vercel env.')
 }
 
 /** Provider for a specific role config */
@@ -29,27 +28,21 @@ export function createProviderFor(config: RoleConfig, apiKeys?: APIKeys): AIProv
   switch (config.provider) {
     case 'openai':
       if (!hasKey(apiKeys?.openai) && !process.env.OPENAI_API_KEY) {
-        console.warn('[provider] OPENAI_API_KEY chybí — používám mock')
-        return new MockProvider()
+        throw new ProviderConfigurationError('OpenAI není nastavené. Doplň `OPENAI_API_KEY` nebo vlož OpenAI klíč v nastavení.')
       }
       return new OpenAIProvider(config.model, apiKeys)
 
     case 'anthropic':
       if (!hasKey(apiKeys?.anthropic) && !process.env.ANTHROPIC_API_KEY) {
-        console.warn('[provider] ANTHROPIC_API_KEY chybí — používám mock')
-        return new MockProvider()
+        throw new ProviderConfigurationError('Claude není nastavený. Doplň `ANTHROPIC_API_KEY` nebo vlož Anthropic klíč v nastavení.')
       }
       return new AnthropicProvider(config.model, apiKeys)
 
     case 'gemini':
       if (!hasKey(apiKeys?.gemini) && !process.env.GEMINI_API_KEY) {
-        console.warn('[provider] GEMINI_API_KEY chybí — používám mock')
-        return new MockProvider()
+        throw new ProviderConfigurationError('Gemini není nastavené. Doplň `GEMINI_API_KEY` nebo vlož Gemini klíč v nastavení.')
       }
       return new GeminiProvider(config.model, apiKeys)
-
-    default:
-      return new MockProvider()
   }
 }
 

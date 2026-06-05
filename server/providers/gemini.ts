@@ -1,4 +1,4 @@
-import type { AIProvider, APIKeys, GenerateOptions } from './interface'
+import { ProviderResponseError, type AIProvider, type APIKeys, type GenerateOptions } from './interface'
 
 export const GEMINI_MODELS = [
   { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
@@ -7,7 +7,7 @@ export const GEMINI_MODELS = [
 ]
 
 const TEMPERATURES: Record<string, number> = {
-  low: 0.2, medium: 0.7, high: 1.2,
+  low: 0.2, medium: 0.45, high: 0.8,
 }
 
 export class GeminiProvider implements AIProvider {
@@ -49,7 +49,7 @@ export class GeminiProvider implements AIProvider {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
     const response = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
       body: JSON.stringify(body),
     })
 
@@ -59,8 +59,18 @@ export class GeminiProvider implements AIProvider {
     }
 
     const data = await response.json() as {
-      candidates: Array<{ content: { parts: Array<{ text: string }> } }>
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> }; finishReason?: string }>
+      promptFeedback?: { blockReason?: string }
     }
-    return data.candidates[0]?.content?.parts[0]?.text ?? ''
+    const text = data.candidates?.[0]?.content?.parts
+      ?.map(part => part.text ?? '')
+      .join('')
+      .trim()
+
+    if (text) return text
+    if (data.promptFeedback?.blockReason) {
+      throw new ProviderResponseError(`Gemini odpověď zablokovalo: ${data.promptFeedback.blockReason}`)
+    }
+    throw new ProviderResponseError(`Gemini vrátilo prázdnou odpověď pro model ${model}.`)
   }
 }

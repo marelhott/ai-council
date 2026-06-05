@@ -1,4 +1,4 @@
-import type { AIProvider, APIKeys, GenerateOptions } from './interface'
+import { ProviderResponseError, type AIProvider, type APIKeys, type GenerateOptions } from './interface'
 
 // Fallback statický seznam — /api/models vrací živý aktuální seznam
 export const OPENAI_MODELS = [
@@ -13,6 +13,19 @@ const REASONING_EFFORT: Record<string, string> = {
 
 const TEMPERATURES: Record<string, number> = {
   low: 0.3, medium: 0.7, high: 1.0,
+}
+
+function extractTextContent(content: unknown): string {
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return ''
+  return content
+    .map(part => {
+      if (typeof part === 'string') return part
+      if (part && typeof part === 'object' && 'text' in part && typeof part.text === 'string') return part.text
+      return ''
+    })
+    .join('')
+    .trim()
 }
 
 export class OpenAIProvider implements AIProvider {
@@ -63,7 +76,12 @@ export class OpenAIProvider implements AIProvider {
       throw new Error(`OpenAI selhal (${response.status}): ${err.slice(0, 200)}`)
     }
 
-    const data = await response.json() as { choices: Array<{ message: { content: string } }> }
-    return data.choices[0]?.message?.content ?? ''
+    const data = await response.json() as { choices?: Array<{ message?: { content?: unknown; refusal?: string | null } }> }
+    const message = data.choices?.[0]?.message
+    const content = extractTextContent(message?.content)
+
+    if (content) return content
+    if (message?.refusal) throw new ProviderResponseError(`OpenAI odmítlo odpovědět: ${message.refusal}`)
+    throw new ProviderResponseError(`OpenAI vrátilo prázdnou odpověď pro model ${model}.`)
   }
 }

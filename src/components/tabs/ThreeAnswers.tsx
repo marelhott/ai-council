@@ -82,22 +82,16 @@ function SlotSelector({ config, providers, onChange, index }: {
           </button>
         ))}
       </div>
-      {/* Model — free-text + datalist suggestions */}
-      <input
-        type="text"
+      {/* Model select */}
+      <select
         className="ai-config-select"
-        list={`slot-models-${index}`}
         value={config.model}
         onChange={e => onChange({ ...config, model: e.target.value })}
-        placeholder="napiš libovolný model ID..."
-        spellCheck={false}
-        autoComplete="off"
-      />
-      <datalist id={`slot-models-${index}`}>
+      >
         {models.map(m => (
           <option key={m.id} value={m.id}>{m.label}</option>
         ))}
-      </datalist>
+      </select>
       {/* Thinking level */}
       <div className="slot-thinking">
         {(['low', 'medium', 'high'] as ThinkingLevel[]).map(lvl => {

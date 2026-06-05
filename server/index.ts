@@ -375,7 +375,47 @@ app.post('/api/council', async (req, res) => {
       repairPrompt: 'Oprav odpověď do JSON objektu s kořenovými poli evaluation a synthesis podle zadaného schématu AI Council.',
     })
     evaluation = parsed.evaluation ?? evaluation
-    const synthesis = parsed.synthesis ?? null
+    let synthesis = parsed.synthesis ?? null
+
+    if (!synthesis) {
+      synthesis = await parseJsonWithRepair<{
+        summary: string
+        consensus: string[]
+        disagreements: string[]
+        strongestArgument: string
+        biggestRisk: string
+        missingInfo: string
+        nextStep: string
+        verdict: 'pokračovat' | 'upravit' | 'nejdřív ověřit' | 'zastavit'
+      }>({
+        raw: await wrapupProvider.generate({
+          messages: [
+            {
+              role: 'system',
+              content: `Jsi předseda AI rady. Vrať POUZE validní JSON objekt pro finální syntézu s poli:
+{
+  "summary": "Stručné shrnutí v 2-3 větách.",
+  "consensus": ["bod1", "bod2", "bod3"],
+  "disagreements": ["bod1", "bod2"],
+  "strongestArgument": "Nejsilnější argument z celé debaty.",
+  "biggestRisk": "Největší riziko identifikované radou.",
+  "missingInfo": "Informace, které by mohly změnit závěr.",
+  "nextStep": "Jedna konkrétní akce.",
+  "verdict": "pokračovat" | "upravit" | "nejdřív ověřit" | "zastavit"
+}`,
+            },
+            {
+              role: 'user',
+              content: `Otázka: ${prompt}\n\n${responseSummary}\n\nPředchozí evaluace:\n${JSON.stringify(evaluation)}`,
+            },
+          ],
+          maxTokens: 420,
+          thinkingLevel: synthesisConfig?.thinkingLevel ?? 'low',
+        }),
+        provider: wrapupProvider,
+        repairPrompt: 'Oprav odpověď do jednoho validního synthesis JSON objektu podle zadaného schématu AI Council.',
+      })
+    }
 
     res.json({ initialResponses, evaluation, synthesis })
   } catch (err) {

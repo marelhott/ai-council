@@ -181,12 +181,12 @@ export default function WeakestAssumption({ apiKeys }: { apiKeys: APIKeys }) {
 
   return (
     <div className="tab-page">
-      <div className="thread-page-header">
-        <div>
+      <div className="thread-page-header weakest-header">
+        <div className="weakest-header-copy">
           <h2>Nejslabší předpoklad</h2>
           <p>Jedna otázka dovnitř, jedna tvrdá analýza ven. Bez panelů, přímo v proudu konverzace.</p>
         </div>
-        <div className="single-config-strip">
+        <div className="single-config-strip weakest-header-config">
           <div className="inline-role-config">
             <div className="provider-badge">
               <span className="provider-dot" style={{ background: '#d97706' }} />

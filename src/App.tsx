@@ -13,9 +13,9 @@ type Tab = 'weakest' | 'three' | 'perspectives' | 'council' | 'brainstorm'
 
 const TABS: Array<{ id: Tab; label: string; hint: string }> = [
   { id: 'three', label: 'Tři odpovědi', hint: 'Čistý paralelní chat, bez rolí.' },
+  { id: 'brainstorm', label: 'Brainstorm', hint: 'GPT-5.5 a Claude Opus si brousí odpověď mezi sebou.' },
   { id: 'perspectives', label: 'Tři pohledy', hint: 'Poradce, oponent, stratég.' },
   { id: 'council', label: 'AI Council', hint: 'Více rolí, vzájemná kritika, závěr.' },
-  { id: 'brainstorm', label: 'Brainstorm', hint: 'GPT-5.5 a Claude Opus si brousí odpověď mezi sebou.' },
   { id: 'weakest', label: 'Nejslabší předpoklad', hint: 'Kde se to může celé rozbít?' },
 ]
 

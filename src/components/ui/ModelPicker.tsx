@@ -8,10 +8,6 @@ const THINKING_LABELS: Record<ThinkingLevel, string> = {
   high: 'Hluboké',
 }
 
-function formatModelLabel(model: string) {
-  return model.replace(/^gpt-/, 'GPT-').replace('claude-', 'Claude ').replace(/-/g, ' ')
-}
-
 export default function ModelPicker({
   config,
   providers,
@@ -25,6 +21,7 @@ export default function ModelPicker({
   const menuRef = useRef<HTMLDivElement>(null)
   const providerData = providers.find(provider => provider.provider === config.provider)
   const models = providerData?.models ?? []
+  const selectedModelLabel = models.find(model => model.id === config.model)?.label ?? config.model
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -44,7 +41,7 @@ export default function ModelPicker({
     <div className="stream-config-row" ref={menuRef}>
       <div className="stream-config">
         <button type="button" className="stream-text-trigger" onClick={() => setOpenMenu(current => current === 'model' ? null : 'model')}>
-          {formatModelLabel(config.model)}
+          {selectedModelLabel}
         </button>
         {openMenu === 'model' && (
           <div className="stream-config-panel">

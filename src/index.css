@@ -149,6 +149,8 @@ a {
 }
 
 .app-workspace {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -157,7 +159,8 @@ a {
 .tab-page {
   display: flex;
   flex-direction: column;
-  height: auto;
+  flex: 1;
+  height: 100%;
   min-height: 100%;
 }
 

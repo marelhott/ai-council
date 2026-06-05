@@ -3,7 +3,7 @@ import type { AIProvider, APIKeys, GenerateOptions } from './interface'
 
 const THINKING_BUDGETS: Record<string, number> = {
   low:    0,      // no extended thinking
-  medium: 5000,   // moderate
+  medium: 0,      // default normal mode for speed and compatibility
   high:   16000,  // deep
 }
 
@@ -44,14 +44,20 @@ export class AnthropicProvider implements AIProvider {
     // Extended thinking only on Opus/Sonnet, not Haiku
     const supportsThinking = !model.includes('haiku') && budget > 0
     if (supportsThinking) {
-      const thinkingResponse = await this.client.messages.create({
-        ...baseParams,
-        max_tokens: (options.maxTokens ?? 1500) + budget,
-        thinking: { type: 'enabled', budget_tokens: budget },
-      } as Parameters<typeof this.client.messages.create>[0])
-      const msg = thinkingResponse as { content: Array<{ type: string; text?: string }> }
-      const block = msg.content.find(b => b.type === 'text')
-      return block?.text ?? ''
+      try {
+        const thinkingResponse = await this.client.messages.create({
+          ...baseParams,
+          max_tokens: (options.maxTokens ?? 1500) + budget,
+          thinking: { type: 'enabled', budget_tokens: budget },
+        } as Parameters<typeof this.client.messages.create>[0])
+        const msg = thinkingResponse as { content: Array<{ type: string; text?: string }> }
+        const block = msg.content.find(b => b.type === 'text')
+        return block?.text ?? ''
+      } catch (error) {
+        const message = error instanceof Error ? error.message : ''
+        const incompatibleThinking = message.includes('thinking.type.enabled') || message.includes('budget_tokens')
+        if (!incompatibleThinking) throw error
+      }
     }
 
     const temps: Record<string, number> = { low: 0.3, medium: 0.7, high: 1.0 }

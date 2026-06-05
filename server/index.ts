@@ -1,6 +1,7 @@
 import express from 'express'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
+import { jsonrepair } from 'jsonrepair'
 import { createProvider, createProviderFor, AVAILABLE_PROVIDERS, type RoleConfig } from './providers/index'
 import { fetchLiveModels } from './liveModels'
 import { ProviderConfigurationError, type APIKeys } from './providers/interface'
@@ -48,6 +49,12 @@ async function parseJsonWithRepair<T>({
   try {
     return JSON.parse(extractJsonObject(raw)) as T
   } catch {
+    try {
+      return JSON.parse(jsonrepair(extractJsonObject(raw))) as T
+    } catch {
+      // fall through to model-assisted repair
+    }
+
     const repaired = await provider.generate({
       messages: [
         {
@@ -62,7 +69,12 @@ async function parseJsonWithRepair<T>({
       maxTokens: 500,
       thinkingLevel: 'low',
     })
-    return JSON.parse(extractJsonObject(repaired)) as T
+
+    try {
+      return JSON.parse(extractJsonObject(repaired)) as T
+    } catch {
+      return JSON.parse(jsonrepair(extractJsonObject(repaired))) as T
+    }
   }
 }
 

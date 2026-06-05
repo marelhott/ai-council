@@ -37,6 +37,30 @@ function extractJsonObject(value: string) {
   return stripped.slice(first, last + 1)
 }
 
+function hasCompleteCouncilSynthesis(value: unknown): value is {
+  summary: string
+  consensus: string[]
+  disagreements: string[]
+  strongestArgument: string
+  biggestRisk: string
+  missingInfo: string
+  nextStep: string
+  verdict: 'pokračovat' | 'upravit' | 'nejdřív ověřit' | 'zastavit'
+} {
+  if (!value || typeof value !== 'object') return false
+  const synthesis = value as Record<string, unknown>
+  const verdicts = new Set(['pokračovat', 'upravit', 'nejdřív ověřit', 'zastavit'])
+
+  return typeof synthesis.summary === 'string' && synthesis.summary.trim().length > 20
+    && Array.isArray(synthesis.consensus) && synthesis.consensus.length > 0
+    && Array.isArray(synthesis.disagreements)
+    && typeof synthesis.strongestArgument === 'string' && synthesis.strongestArgument.trim().length > 10
+    && typeof synthesis.biggestRisk === 'string' && synthesis.biggestRisk.trim().length > 10
+    && typeof synthesis.missingInfo === 'string' && synthesis.missingInfo.trim().length > 10
+    && typeof synthesis.nextStep === 'string' && synthesis.nextStep.trim().length > 10
+    && typeof synthesis.verdict === 'string' && verdicts.has(synthesis.verdict)
+}
+
 async function parseJsonWithRepair<T>({
   raw,
   provider,
@@ -375,10 +399,10 @@ app.post('/api/council', async (req, res) => {
       repairPrompt: 'Oprav odpověď do JSON objektu s kořenovými poli evaluation a synthesis podle zadaného schématu AI Council.',
     })
     evaluation = parsed.evaluation ?? evaluation
-    let synthesis = parsed.synthesis ?? null
+    let synthesis = hasCompleteCouncilSynthesis(parsed.synthesis) ? parsed.synthesis : null
 
     if (!synthesis) {
-      synthesis = await parseJsonWithRepair<{
+      const synthesisRetry = await parseJsonWithRepair<{
         summary: string
         consensus: string[]
         disagreements: string[]
@@ -409,12 +433,13 @@ app.post('/api/council', async (req, res) => {
               content: `Otázka: ${prompt}\n\n${responseSummary}\n\nPředchozí evaluace:\n${JSON.stringify(evaluation)}`,
             },
           ],
-          maxTokens: 420,
+          maxTokens: 700,
           thinkingLevel: synthesisConfig?.thinkingLevel ?? 'low',
         }),
         provider: wrapupProvider,
         repairPrompt: 'Oprav odpověď do jednoho validního synthesis JSON objektu podle zadaného schématu AI Council.',
       })
+      synthesis = hasCompleteCouncilSynthesis(synthesisRetry) ? synthesisRetry : null
     }
 
     res.json({ initialResponses, evaluation, synthesis })

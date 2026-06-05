@@ -1,7 +1,7 @@
 import { ProviderResponseError, type AIProvider, type APIKeys, type GenerateOptions } from './interface'
 
 export const GEMINI_MODELS = [
-  { id: 'gemini-3-flash',       label: 'Gemini 3 Flash'       },
+  { id: 'gemini-3.5-flash',     label: 'Gemini 3.5 Flash'     },
   { id: 'gemini-3-pro-preview', label: 'Gemini 3 Pro Preview' },
   { id: 'gemini-2.5-flash',     label: 'Gemini 2.5 Flash'     },
   { id: 'gemini-2.5-pro',       label: 'Gemini 2.5 Pro'       },
@@ -17,7 +17,7 @@ export class GeminiProvider implements AIProvider {
   private apiKey?: string
 
   constructor(model?: string, keys?: APIKeys) {
-    this.model = model ?? process.env.GEMINI_MODEL ?? 'gemini-3-flash'
+    this.model = model ?? process.env.GEMINI_MODEL ?? 'gemini-3.5-flash'
     this.apiKey = keys?.gemini || process.env.GEMINI_API_KEY
   }
 

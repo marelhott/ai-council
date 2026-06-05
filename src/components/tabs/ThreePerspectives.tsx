@@ -30,9 +30,9 @@ const THINKING_LABELS: Record<ThinkingLevel, string> = {
 }
 
 const DEFAULT_CONFIGS: Record<string, RoleConfig> = {
-  practical: { provider: 'openai', model: 'gpt-5.2', thinkingLevel: 'low' },
-  critical: { provider: 'anthropic', model: 'claude-sonnet-4-20250514', thinkingLevel: 'low' },
-  creative: { provider: 'gemini', model: 'gemini-3-flash', thinkingLevel: 'low' },
+  practical: { provider: 'openai', model: 'gpt-5.5', thinkingLevel: 'low' },
+  critical: { provider: 'anthropic', model: 'claude-sonnet-4-6', thinkingLevel: 'low' },
+  creative: { provider: 'gemini', model: 'gemini-3.5-flash', thinkingLevel: 'low' },
 }
 
 function RoleSettings({

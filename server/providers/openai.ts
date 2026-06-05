@@ -2,7 +2,8 @@ import { ProviderResponseError, type AIProvider, type APIKeys, type GenerateOpti
 
 // Fallback statický seznam — /api/models vrací živý aktuální seznam
 export const OPENAI_MODELS = [
-  { id: 'gpt-5.2',      label: 'GPT-5.2',        reasoning: true  },
+  { id: 'gpt-5.5',      label: 'GPT-5.5',        reasoning: true  },
+  { id: 'gpt-5.4',      label: 'GPT-5.4',        reasoning: true  },
   { id: 'gpt-5-mini',   label: 'GPT-5 Mini',     reasoning: true  },
   { id: 'gpt-5-nano',   label: 'GPT-5 Nano',     reasoning: true  },
   { id: 'gpt-4.1',      label: 'GPT-4.1',        reasoning: false },
@@ -35,7 +36,7 @@ export class OpenAIProvider implements AIProvider {
   private apiKey?: string
 
   constructor(model?: string, keys?: APIKeys) {
-    this.model = model ?? process.env.OPENAI_MODEL ?? 'gpt-5.2'
+    this.model = model ?? process.env.OPENAI_MODEL ?? 'gpt-5.5'
     this.apiKey = keys?.openai || process.env.OPENAI_API_KEY
   }
 
@@ -47,22 +48,15 @@ export class OpenAIProvider implements AIProvider {
     const level = options.thinkingLevel ?? 'medium'
     const isReasoning = /^o\d/.test(model) || /^gpt-5/.test(model) || OPENAI_MODELS.find(m => m.id === model)?.reasoning === true
 
-    const systemMsg = options.messages.find(m => m.role === 'system')
-    const userMessages = options.messages.filter(m => m.role !== 'system')
+    if (isReasoning) {
+      return this.generateViaResponsesApi(model, options, apiKey, level)
+    }
 
     const body: Record<string, unknown> = {
       model,
-      messages: [
-        ...(systemMsg ? [{ role: 'system', content: systemMsg.content }] : []),
-        ...userMessages.map(m => ({ role: m.role, content: m.content })),
-      ],
+      messages: options.messages.map(message => ({ role: message.role, content: message.content })),
       max_completion_tokens: options.maxTokens ?? 1500,
-    }
-
-    if (isReasoning) {
-      body.reasoning_effort = REASONING_EFFORT[level]
-    } else {
-      body.temperature = TEMPERATURES[level]
+      temperature: TEMPERATURES[level],
     }
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -82,6 +76,51 @@ export class OpenAIProvider implements AIProvider {
 
     if (content) return content
     if (message?.refusal) throw new ProviderResponseError(`OpenAI odmítlo odpovědět: ${message.refusal}`)
+    throw new ProviderResponseError(`OpenAI vrátilo prázdnou odpověď pro model ${model}.`)
+  }
+
+  private async generateViaResponsesApi(
+    model: string,
+    options: GenerateOptions,
+    apiKey: string,
+    level: string,
+  ): Promise<string> {
+    const body: Record<string, unknown> = {
+      model,
+      input: options.messages.map(message => ({
+        role: message.role,
+        content: [{ type: 'input_text', text: message.content }],
+      })),
+      max_output_tokens: options.maxTokens ?? 1500,
+      reasoning: { effort: REASONING_EFFORT[level] },
+    }
+
+    const response = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify(body),
+    })
+
+    if (!response.ok) {
+      const err = await response.text()
+      throw new Error(`OpenAI selhal (${response.status}): ${err.slice(0, 200)}`)
+    }
+
+    const data = await response.json() as {
+      output_text?: string
+      output?: Array<{ content?: Array<{ type?: string; text?: string }> }>
+    }
+
+    const text = data.output_text?.trim()
+    if (text) return text
+
+    const fallbackText = data.output
+      ?.flatMap(item => item.content ?? [])
+      .map(part => part.text ?? '')
+      .join('')
+      .trim()
+
+    if (fallbackText) return fallbackText
     throw new ProviderResponseError(`OpenAI vrátilo prázdnou odpověď pro model ${model}.`)
   }
 }

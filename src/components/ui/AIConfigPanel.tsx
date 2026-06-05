@@ -3,9 +3,9 @@ import type { APIKeys, RoleConfig, ProviderName, ThinkingLevel } from '../../typ
 import { useProviders } from './useProviders'
 
 const DEFAULT_MODELS: Record<ProviderName, string> = {
-  openai: 'gpt-5.2',
-  anthropic: 'claude-sonnet-4-20250514',
-  gemini: 'gemini-3-flash',
+  openai: 'gpt-5.5',
+  anthropic: 'claude-sonnet-4-6',
+  gemini: 'gemini-3.5-flash',
 }
 
 const THINKING_LABELS: Record<ThinkingLevel, string> = { low: 'Rychlé', medium: 'Standard', high: 'Hluboké' }

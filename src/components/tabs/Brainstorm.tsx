@@ -61,6 +61,13 @@ export default function Brainstorm({ apiKeys }: { apiKeys: APIKeys }) {
   const gptLabel = getModelLabel(OPENAI_CONFIG, providers)
   const claudeLabel = getModelLabel(CLAUDE_CONFIG, providers)
 
+  function displayModelLabel(message: BrainstormMessage) {
+    if (!message.modelName) return ''
+    if (message.speaker === 'openai') return getModelLabel({ provider: 'openai', model: message.modelName }, providers)
+    if (message.speaker === 'anthropic') return getModelLabel({ provider: 'anthropic', model: message.modelName }, providers)
+    return message.modelName
+  }
+
   async function executeBrainstorm({
     prompt,
     turnId,
@@ -259,7 +266,7 @@ export default function Brainstorm({ apiKeys }: { apiKeys: APIKeys }) {
                   <div key={`${turn.id}-${index}`} className={`thread-message thread-message-${message.role}`}>
                     <div className="thread-message-meta">
                       {message.speakerLabel}
-                      {message.modelName ? ` · ${message.modelName}` : ''}
+                      {message.modelName ? ` · ${displayModelLabel(message)}` : ''}
                     </div>
                     {message.status === 'loading' ? (
                       <div className="loading-state">

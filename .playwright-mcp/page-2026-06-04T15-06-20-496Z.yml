@@ -1,0 +1,40 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - generic [ref=e7]:
+          - text: Praktický nástroj pro rozhodování
+          - heading "Nenech svůj nápad projít bez odporu." [level=1] [ref=e8]
+          - paragraph [ref=e9]: Popiš rozhodnutí, plán nebo otázku. AI ti pomůže najít slabá místa, porovnat různé pohledy a dojít ke konkrétnímu dalšímu kroku.
+        - generic [ref=e10]:
+          - generic [ref=e11]: Co dostaneš místo dalšího chatu
+          - list [ref=e12]:
+            - listitem [ref=e13]: Jasný verdikt a nejslabší předpoklad
+            - listitem [ref=e14]: Tři různé pohledy vedle sebe
+            - listitem [ref=e15]: Společný závěr, když chceš širší oponenturu
+      - tablist [ref=e16]:
+        - tab "Najdi nejslabší předpoklad Kde se to může celé rozbít?" [selected] [ref=e17] [cursor=pointer]:
+          - generic [ref=e18]: Najdi nejslabší předpoklad
+          - generic [ref=e19]: Kde se to může celé rozbít?
+        - tab "Tři odpovědi Jedna otázka, tři různé pohledy." [ref=e20] [cursor=pointer]:
+          - generic [ref=e21]: Tři odpovědi
+          - generic [ref=e22]: Jedna otázka, tři různé pohledy.
+        - tab "AI Council Více rolí, vzájemná kritika, společný závěr." [ref=e23] [cursor=pointer]:
+          - generic [ref=e24]: AI Council
+          - generic [ref=e25]: Více rolí, vzájemná kritika, společný závěr.
+  - tabpanel [ref=e26]:
+    - generic [ref=e27]:
+      - generic [ref=e28]:
+        - heading "Najdi nejslabší předpoklad" [level=2] [ref=e29]
+        - paragraph [ref=e30]: Popiš nápad, rozhodnutí nebo plán. AI ti pomůže najít místo, kde se to může celé rozbít, a navrhne nejrychlejší test.
+      - generic [ref=e31]:
+        - textbox "Popiš svůj nápad nebo rozhodnutí..." [ref=e33]
+        - generic [ref=e34]:
+          - button "Chci spustit službu, kde si zákazník vybere nejbližší term…" [ref=e35] [cursor=pointer]
+          - button "Přemýšlím, jestli změnit pricing u své SaaS služby z roční…" [ref=e36] [cursor=pointer]
+          - button "Chci postavit AI nástroj pro interní onboarding nových zam…" [ref=e37] [cursor=pointer]
+          - button "Plánuji klientovi poslat nabídku na 3měsíční konzultační p…" [ref=e38] [cursor=pointer]
+        - button "Otestovat nápad" [disabled] [ref=e39]
+      - generic [ref=e40]:
+        - img [ref=e41]
+        - paragraph [ref=e43]: Zadej nápad nebo rozhodnutí. Výsledek se zobrazí tady.

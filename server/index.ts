@@ -1,7 +1,7 @@
 import express from 'express'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
-import { createProvider, createProviderFor, AVAILABLE_PROVIDERS, type RoleConfig } from './providers/index.ts'
+import { createProvider, createProviderFor, AVAILABLE_PROVIDERS, type RoleConfig } from './providers/index'
 
 const app = express()
 app.use(express.json())
@@ -53,7 +53,7 @@ app.post('/api/weakest-assumption', async (req, res) => {
       ? `Původní nápad: ${prompt}\n\nUživatel chce: ${refineAction}. Uprav odpověď podle tohoto požadavku.`
       : prompt
 
-    const raw = await provider.generate({
+    const raw = await defaultProvider.generate({
       messages: [
         { role: 'system', content: WEAKEST_SYSTEM },
         { role: 'user', content: userContent },
@@ -207,7 +207,7 @@ app.post('/api/council', async (req, res) => {
       .map(r => `**${r.roleLabel}:** ${r.content}`)
       .join('\n\n')
 
-    const evalRaw = await provider.generate({
+    const evalRaw = await defaultProvider.generate({
       messages: [
         { role: 'system', content: EVALUATION_SYSTEM },
         { role: 'user', content: `Otázka: ${prompt}\n\n${responseSummary}` },
@@ -226,7 +226,7 @@ app.post('/api/council', async (req, res) => {
     // Step 3: Synthesis
     const synthInput = `Otázka: ${prompt}\n\n${responseSummary}\n\nHodnocení debaty:\nSilné: ${evaluation.strengths}\nSlabé: ${evaluation.weaknesses}\nChybí: ${evaluation.missing}\nNejlepší argument: ${evaluation.bestArgument}`
 
-    const synthRaw = await provider.generate({
+    const synthRaw = await defaultProvider.generate({
       messages: [
         { role: 'system', content: SYNTHESIS_SYSTEM },
         { role: 'user', content: synthInput },

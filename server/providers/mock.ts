@@ -1,4 +1,4 @@
-import type { AIProvider, GenerateOptions } from './interface.ts'
+import type { AIProvider, GenerateOptions } from './interface'
 
 // Delay to simulate real API latency
 function delay(ms: number) {

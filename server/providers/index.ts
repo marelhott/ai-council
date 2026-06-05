@@ -1,8 +1,8 @@
-import type { AIProvider } from './interface.ts'
-import { MockProvider } from './mock.ts'
-import { AnthropicProvider, ANTHROPIC_MODELS } from './anthropic.ts'
-import { OpenAIProvider, OPENAI_MODELS } from './openai.ts'
-import { GeminiProvider, GEMINI_MODELS } from './gemini.ts'
+import type { AIProvider } from './interface'
+import { MockProvider } from './mock'
+import { AnthropicProvider, ANTHROPIC_MODELS } from './anthropic'
+import { OpenAIProvider, OPENAI_MODELS } from './openai'
+import { GeminiProvider, GEMINI_MODELS } from './gemini'
 
 export type ProviderName = 'openai' | 'anthropic' | 'gemini' | 'mock'
 
@@ -81,4 +81,4 @@ export const AVAILABLE_PROVIDERS = [
   },
 ]
 
-export { type AIProvider } from './interface.ts'
+export { type AIProvider } from './interface'

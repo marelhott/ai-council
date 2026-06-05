@@ -1,4 +1,4 @@
-import type { AIProvider, GenerateOptions } from './interface.ts'
+import type { AIProvider, GenerateOptions } from './interface'
 
 export const GEMINI_MODELS = [
   { id: 'gemini-2.5-pro',   label: 'Gemini 2.5 Pro'   },

@@ -1,4 +1,4 @@
-import type { AIProvider, GenerateOptions } from './interface.ts'
+import type { AIProvider, GenerateOptions } from './interface'
 
 export const OPENAI_MODELS = [
   { id: 'gpt-4.1',      label: 'GPT-4.1',       reasoning: false },

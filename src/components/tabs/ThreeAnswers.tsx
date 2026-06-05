@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { APIKeys, ProviderName, ThinkingLevel } from '../../types/index'
 import SafeMarkdown from '../ui/SafeMarkdown'
 import { TEXT_ATTACHMENT_ACCEPT, useComposerAttachments } from '../ui/useComposerAttachments'
+import { getModelLabel } from '../ui/modelLabels'
 import { useProviders, type LiveProvider } from '../ui/useProviders'
 
 interface SlotConfig {
@@ -42,9 +43,9 @@ const THINKING_LABELS: Record<ThinkingLevel, string> = {
 }
 
 const DEFAULT_SLOTS: SlotConfig[] = [
-  { provider: 'openai', model: 'gpt-5.5', thinkingLevel: 'low' },
-  { provider: 'anthropic', model: 'claude-sonnet-4-6', thinkingLevel: 'low' },
-  { provider: 'gemini', model: 'gemini-3.5-flash', thinkingLevel: 'low' },
+  { provider: 'openai', model: 'gpt-5.5', thinkingLevel: 'medium' },
+  { provider: 'anthropic', model: 'claude-sonnet-4-6', thinkingLevel: 'medium' },
+  { provider: 'gemini', model: 'gemini-3.5-flash', thinkingLevel: 'medium' },
 ]
 
 function SlotSettings({
@@ -60,6 +61,7 @@ function SlotSettings({
   const menuRef = useRef<HTMLDivElement>(null)
   const providerData = providers.find(provider => provider.provider === config.provider)
   const models = providerData?.models ?? []
+  const selectedModelLabel = getModelLabel(config, providers)
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -79,7 +81,7 @@ function SlotSettings({
     <div className="stream-config-row" ref={menuRef}>
       <div className="stream-config">
         <button type="button" className="stream-text-trigger" onClick={() => setOpenMenu(current => current === 'model' ? null : 'model')}>
-          {config.model.replace(/^gpt-/, 'GPT-').replace('claude-', 'Claude ').replace(/-/g, ' ')}
+          {selectedModelLabel}
         </button>
         {openMenu === 'model' && (
         <div className="stream-config-panel">
@@ -175,7 +177,7 @@ function ChatColumn({
 }) {
   const color = PROVIDER_COLORS[slot.config.provider] ?? '#6b7280'
   const providerLabel = PROVIDER_LABELS[slot.config.provider] ?? slot.config.provider
-  const modelLabel = slot.config.model
+  const modelLabel = getModelLabel(slot.config, providers)
   const providerData = providers.find(provider => provider.provider === slot.config.provider)
   const connected = providerData?.source === 'live' && providerData.hasKey
   const columnRef = useRef<HTMLDivElement>(null)

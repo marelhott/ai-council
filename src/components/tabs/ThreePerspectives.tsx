@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { APIKeys, ConversationRound, RoleConfig, RoleResponse, ThinkingLevel } from '../../types/index'
 import SafeMarkdown from '../ui/SafeMarkdown'
 import { TEXT_ATTACHMENT_ACCEPT, useComposerAttachments } from '../ui/useComposerAttachments'
+import { getModelLabel, getProviderLabel } from '../ui/modelLabels'
 import { useProviders, type LiveProvider } from '../ui/useProviders'
 
 const PROVIDER_COLORS: Record<string, string> = {
@@ -30,9 +31,9 @@ const THINKING_LABELS: Record<ThinkingLevel, string> = {
 }
 
 const DEFAULT_CONFIGS: Record<string, RoleConfig> = {
-  practical: { provider: 'openai', model: 'gpt-5.5', thinkingLevel: 'low' },
-  critical: { provider: 'anthropic', model: 'claude-sonnet-4-6', thinkingLevel: 'low' },
-  creative: { provider: 'gemini', model: 'gemini-3.5-flash', thinkingLevel: 'low' },
+  practical: { provider: 'openai', model: 'gpt-5.5', thinkingLevel: 'medium' },
+  critical: { provider: 'anthropic', model: 'claude-sonnet-4-6', thinkingLevel: 'medium' },
+  creative: { provider: 'gemini', model: 'gemini-3.5-flash', thinkingLevel: 'medium' },
 }
 
 function RoleSettings({
@@ -48,6 +49,7 @@ function RoleSettings({
   const menuRef = useRef<HTMLDivElement>(null)
   const providerData = providers.find(provider => provider.provider === config.provider)
   const models = providerData?.models ?? []
+  const selectedModelLabel = getModelLabel(config, providers)
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -67,7 +69,7 @@ function RoleSettings({
     <div className="stream-config-row" ref={menuRef}>
       <div className="stream-config">
         <button type="button" className="stream-text-trigger" onClick={() => setOpenMenu(current => current === 'model' ? null : 'model')}>
-          {config.model.replace(/^gpt-/, 'GPT-').replace('claude-', 'Claude ').replace(/-/g, ' ')}
+          {selectedModelLabel}
         </button>
         {openMenu === 'model' && (
         <div className="stream-config-panel">
@@ -163,15 +165,8 @@ function RoleColumn({
   onConfigChange: (config: RoleConfig) => void
 }) {
   const providerColor = PROVIDER_COLORS[config.provider] ?? '#6b7280'
-  const providerLabel =
-    config.provider === 'anthropic'
-      ? 'Claude'
-      : config.provider === 'openai'
-        ? 'OpenAI'
-        : config.provider === 'gemini'
-          ? 'Gemini'
-          : 'Nepřipojeno'
-  const modelLabel = config.model
+  const providerLabel = getProviderLabel(config.provider)
+  const modelLabel = getModelLabel(config, providers)
   const providerData = providers.find(provider => provider.provider === config.provider)
   const connected = providerData?.source === 'live' && providerData.hasKey
   const columnRef = useRef<HTMLDivElement>(null)

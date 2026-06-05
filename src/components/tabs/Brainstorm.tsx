@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { APIKeys, BrainstormMessage, RoleConfig } from '../../types/index'
 import SafeMarkdown from '../ui/SafeMarkdown'
+import { getModelLabel } from '../ui/modelLabels'
 import { TEXT_ATTACHMENT_ACCEPT, useComposerAttachments } from '../ui/useComposerAttachments'
+import { useProviders } from '../ui/useProviders'
 
 interface BrainstormTurn {
   id: string
@@ -12,13 +14,13 @@ interface BrainstormTurn {
 const OPENAI_CONFIG: RoleConfig = {
   provider: 'openai',
   model: 'gpt-5.5',
-  thinkingLevel: 'low',
+  thinkingLevel: 'medium',
 }
 
 const CLAUDE_CONFIG: RoleConfig = {
   provider: 'anthropic',
   model: 'claude-opus-4-8',
-  thinkingLevel: 'low',
+  thinkingLevel: 'medium',
 }
 
 const BRAINSTORM_EXAMPLES = [
@@ -28,9 +30,11 @@ const BRAINSTORM_EXAMPLES = [
 ]
 
 export default function Brainstorm({ apiKeys }: { apiKeys: APIKeys }) {
+  const providers = useProviders(apiKeys)
   const [input, setInput] = useState('')
   const [turns, setTurns] = useState<BrainstormTurn[]>([])
   const [running, setRunning] = useState(false)
+  const [continuing, setContinuing] = useState<string | null>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const {
@@ -52,18 +56,27 @@ export default function Brainstorm({ apiKeys }: { apiKeys: APIKeys }) {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-  }, [turns.length])
+  }, [turns])
 
-  async function runBrainstorm() {
-    const prompt = input.trim()
-    if (!prompt || running) return
+  const gptLabel = getModelLabel(OPENAI_CONFIG, providers)
+  const claudeLabel = getModelLabel(CLAUDE_CONFIG, providers)
 
+  async function executeBrainstorm({
+    prompt,
+    turnId,
+    preserveInput = false,
+  }: {
+    prompt: string
+    turnId?: string
+    preserveInput?: boolean
+  }) {
+    if (!prompt.trim() || running) return
+
+    const actualTurnId = turnId ?? crypto.randomUUID()
     const promptWithAttachments = appendAttachmentContext(prompt)
-    setRunning(true)
-    setInput('')
-
-    const turnId = crypto.randomUUID()
-    const pendingMessages: BrainstormMessage[] = [
+    const pendingMessages: BrainstormMessage[] = turnId
+      ? []
+      : [
       {
         role: 'user',
         speaker: 'user',
@@ -73,9 +86,16 @@ export default function Brainstorm({ apiKeys }: { apiKeys: APIKeys }) {
       },
     ]
 
-    setTurns(previous => [...previous, { id: turnId, prompt, messages: pendingMessages }])
-
     try {
+      setRunning(true)
+      if (!preserveInput) setInput('')
+
+      if (turnId) {
+        setContinuing(turnId)
+      } else {
+        setTurns(previous => [...previous, { id: actualTurnId, prompt, messages: pendingMessages }])
+      }
+
       const response = await fetch('/api/brainstorm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -95,36 +115,72 @@ export default function Brainstorm({ apiKeys }: { apiKeys: APIKeys }) {
       const data = await response.json() as { messages: BrainstormMessage[] }
       setTurns(previous =>
         previous.map(turn =>
-          turn.id === turnId
-            ? { ...turn, messages: [pendingMessages[0], ...data.messages] }
+          turn.id === actualTurnId
+            ? { ...turn, messages: turnId ? [...turn.messages, ...data.messages] : [pendingMessages[0], ...data.messages] }
             : turn,
         ),
       )
     } catch (error) {
-      setTurns(previous =>
-        previous.map(turn =>
-          turn.id === turnId
-            ? {
-                ...turn,
-                messages: [
-                  pendingMessages[0],
-                  {
-                    role: 'assistant',
-                    speaker: 'openai',
-                    speakerLabel: 'Brainstorm',
-                    content: '',
-                    status: 'error',
-                    error: error instanceof Error ? error.message : 'Brainstorm se nepodařilo spustit.',
-                  },
-                ],
-              }
-            : turn,
-        ),
-      )
+      if (turnId) {
+        setTurns(previous =>
+          previous.map(turn =>
+            turn.id === actualTurnId
+              ? {
+                  ...turn,
+                  messages: [
+                    ...turn.messages,
+                    {
+                      role: 'assistant',
+                      speaker: 'openai',
+                      speakerLabel: 'Brainstorm',
+                      content: '',
+                      status: 'error',
+                      error: error instanceof Error ? error.message : 'Brainstorm se nepodařilo spustit.',
+                    },
+                  ],
+                }
+              : turn,
+          ),
+        )
+      } else {
+        setTurns(previous =>
+          previous.map(turn =>
+            turn.id === actualTurnId
+              ? {
+                  ...turn,
+                  messages: [
+                    pendingMessages[0],
+                    {
+                      role: 'assistant',
+                      speaker: 'openai',
+                      speakerLabel: 'Brainstorm',
+                      content: '',
+                      status: 'error',
+                      error: error instanceof Error ? error.message : 'Brainstorm se nepodařilo spustit.',
+                    },
+                  ],
+                }
+              : turn,
+          ),
+        )
+      }
     } finally {
       setRunning(false)
+      setContinuing(null)
       clearAttachments()
     }
+  }
+
+  async function runBrainstorm() {
+    const prompt = input.trim()
+    if (!prompt || running) return
+    await executeBrainstorm({ prompt })
+  }
+
+  async function continueBrainstorm(turn: BrainstormTurn) {
+    const lastAssistantMessage = [...turn.messages].reverse().find(message => message.role === 'assistant' && message.content.trim())
+    if (!lastAssistantMessage) return
+    await executeBrainstorm({ prompt: lastAssistantMessage.content, turnId: turn.id, preserveInput: true })
   }
 
   function clearConversation() {
@@ -165,13 +221,13 @@ export default function Brainstorm({ apiKeys }: { apiKeys: APIKeys }) {
                 <div className="inline-role-config">
                   <div className="provider-badge">
                     <span className="provider-dot" style={{ background: '#10a37f' }} />
-                    <span>GPT-5.5</span>
+                    <span>{gptLabel}</span>
                   </div>
                 </div>
                 <div className="inline-role-config">
                   <div className="provider-badge">
                     <span className="provider-dot" style={{ background: '#d97706' }} />
-                    <span>Claude Opus</span>
+                    <span>{claudeLabel}</span>
                   </div>
                 </div>
               </div>
@@ -195,6 +251,16 @@ export default function Brainstorm({ apiKeys }: { apiKeys: APIKeys }) {
                     )}
                   </div>
                 ))}
+                <div className="refine-row">
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    disabled={running}
+                    onClick={() => continueBrainstorm(turn)}
+                  >
+                    {continuing === turn.id ? 'Brousím dál…' : 'Pokračovat v broušení'}
+                  </button>
+                </div>
               </div>
             ))
           )}

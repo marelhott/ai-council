@@ -18,15 +18,15 @@ const ROLE_COLORS: Record<string, string> = {
 }
 
 const DEFAULT_COUNCIL_CONFIGS: Record<string, RoleConfig> = {
-  practitioner: { provider: 'openai', model: 'gpt-5.5', thinkingLevel: 'low' },
-  skeptic: { provider: 'anthropic', model: 'claude-sonnet-4-6', thinkingLevel: 'low' },
-  strategist: { provider: 'gemini', model: 'gemini-3.5-flash', thinkingLevel: 'low' },
+  practitioner: { provider: 'openai', model: 'gpt-5.5', thinkingLevel: 'medium' },
+  skeptic: { provider: 'anthropic', model: 'claude-sonnet-4-6', thinkingLevel: 'medium' },
+  strategist: { provider: 'gemini', model: 'gemini-3.5-flash', thinkingLevel: 'medium' },
 }
 
 const DEFAULT_WRAPUP_CONFIG: RoleConfig = {
   provider: 'openai',
   model: 'gpt-5.5',
-  thinkingLevel: 'low',
+  thinkingLevel: 'medium',
 }
 
 const COUNCIL_EXAMPLES = [

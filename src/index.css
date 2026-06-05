@@ -51,6 +51,7 @@ body,
 body {
   background: var(--bg);
   color: var(--text);
+  overflow: hidden;
 }
 
 button,
@@ -70,7 +71,9 @@ a {
 .app-shell {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  height: 100dvh;
+  min-height: 100dvh;
+  overflow: hidden;
 }
 
 .app-topbar {
@@ -154,14 +157,14 @@ a {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .tab-page {
   display: flex;
   flex-direction: column;
   flex: 1;
-  height: 100%;
-  min-height: 100%;
+  min-height: calc(100dvh - var(--topbar-h));
 }
 
 .thread-page-header,
@@ -214,8 +217,8 @@ a {
 }
 
 .chat-thread {
-  flex: 0 0 auto;
-  min-height: auto;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: visible;
   padding: 8px 24px 180px;
 }
@@ -224,11 +227,12 @@ a {
   width: 100%;
   max-width: 880px;
   margin: 0 auto;
+  min-height: 100%;
 }
 
 .parallel-grid {
-  flex: 0 0 auto;
-  min-height: auto;
+  flex: 1 1 auto;
+  min-height: 0;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0;
@@ -240,6 +244,7 @@ a {
   display: flex;
   flex-direction: column;
   border-left: 1px solid var(--border);
+  min-height: 100%;
 }
 
 .parallel-column:first-child {
@@ -257,8 +262,8 @@ a {
 }
 
 .parallel-column-body {
-  flex: 0 0 auto;
-  min-height: auto;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: visible;
   padding: 20px 18px 180px;
 }

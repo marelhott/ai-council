@@ -31,7 +31,7 @@ interface AnalysisTurn {
 const DEFAULT_ANALYSIS_CONFIG: RoleConfig = {
   provider: 'anthropic',
   model: 'claude-sonnet-4-6',
-  thinkingLevel: 'low',
+  thinkingLevel: 'medium',
 }
 
 function verdictClass(verdict: string) {

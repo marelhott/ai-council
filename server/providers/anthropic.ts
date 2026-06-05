@@ -8,9 +8,10 @@ const THINKING_BUDGETS: Record<string, number> = {
 }
 
 export const ANTHROPIC_MODELS = [
-  { id: 'claude-opus-4-6',    label: 'Claude Opus 4.6' },
-  { id: 'claude-sonnet-4-6',  label: 'Claude Sonnet 4.6' },
-  { id: 'claude-haiku-4-5',   label: 'Claude Haiku 4.5' },
+  { id: 'claude-sonnet-4-20250514',    label: 'Claude Sonnet 4' },
+  { id: 'claude-opus-4-1-20250805',    label: 'Claude Opus 4.1' },
+  { id: 'claude-opus-4-20250514',      label: 'Claude Opus 4' },
+  { id: 'claude-3-5-haiku-20241022',   label: 'Claude Haiku 3.5' },
 ]
 
 export class AnthropicProvider implements AIProvider {
@@ -20,7 +21,7 @@ export class AnthropicProvider implements AIProvider {
 
   constructor(model?: string, keys?: APIKeys) {
     const apiKey = keys?.anthropic || process.env.ANTHROPIC_API_KEY
-    this.model = model ?? process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6'
+    this.model = model ?? process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-20250514'
     this.client = new Anthropic({ apiKey })
   }
 

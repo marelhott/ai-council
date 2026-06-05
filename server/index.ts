@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { createProvider, createProviderFor, AVAILABLE_PROVIDERS, type RoleConfig } from './providers/index'
 import { fetchLiveModels } from './liveModels'
-import { ProviderConfigurationError, ProviderResponseError, type APIKeys } from './providers/interface'
+import { ProviderConfigurationError, type APIKeys } from './providers/interface'
 
 const app = express()
 app.use(express.json())
@@ -22,6 +22,48 @@ function errorMessage(error: unknown): string {
 
 function errorStatus(error: unknown): number {
   return error instanceof ProviderConfigurationError ? 400 : 500
+}
+
+function stripCodeFence(value: string) {
+  return value.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+}
+
+function extractJsonObject(value: string) {
+  const stripped = stripCodeFence(value)
+  const first = stripped.indexOf('{')
+  const last = stripped.lastIndexOf('}')
+  if (first === -1 || last === -1 || last <= first) return stripped
+  return stripped.slice(first, last + 1)
+}
+
+async function parseJsonWithRepair<T>({
+  raw,
+  provider,
+  repairPrompt,
+}: {
+  raw: string
+  provider: ReturnType<typeof createProviderFor> | ReturnType<typeof createProvider>
+  repairPrompt: string
+}): Promise<T> {
+  try {
+    return JSON.parse(extractJsonObject(raw)) as T
+  } catch {
+    const repaired = await provider.generate({
+      messages: [
+        {
+          role: 'system',
+          content: 'Vrať pouze validní JSON. Bez markdownu, bez komentáře, bez vysvětlení.',
+        },
+        {
+          role: 'user',
+          content: `${repairPrompt}\n\nNevalidní odpověď:\n${raw}`,
+        },
+      ],
+      maxTokens: 500,
+      thinkingLevel: 'low',
+    })
+    return JSON.parse(extractJsonObject(repaired)) as T
+  }
 }
 
 // ---- Providers & live models ----
@@ -118,9 +160,11 @@ app.post('/api/weakest-assumption', async (req, res) => {
       thinkingLevel: modelConfig?.thinkingLevel,
     })
 
-    // Parse JSON from response
-    const jsonStr = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
-    const result = JSON.parse(jsonStr)
+    const result = await parseJsonWithRepair({
+      raw,
+      provider,
+      repairPrompt: `Oprav odpověď do JSON objektu přesně s poli: verdict, verdictReason, weakestAssumption, whyCritical, blindSpot, firstTest, killCriterion, nextStep. Původní prompt: ${userContent}`,
+    })
     res.json(result)
   } catch (err) {
     console.error('weakest-assumption error:', err)
@@ -236,10 +280,9 @@ Vrať POUZE validní JSON (bez markdown bloku):
 }`
 
 app.post('/api/council', async (req, res) => {
-  const { prompt, roleConfigs, evaluationConfig, synthesisConfig } = req.body as {
+  const { prompt, roleConfigs, synthesisConfig } = req.body as {
     prompt: string
     roleConfigs?: Record<string, RoleConfig>
-    evaluationConfig?: RoleConfig
     synthesisConfig?: RoleConfig
   }
   if (!prompt?.trim()) return res.status(400).json({ error: 'Chybí prompt' })
@@ -277,11 +320,20 @@ app.post('/api/council', async (req, res) => {
       .map(r => `**${r.roleLabel}:** ${r.status === 'error' ? `(chyba) ${r.error}` : r.content}`)
       .join('\n\n')
 
+    const successfulResponses = initialResponses.filter(r => r.status === 'done' && r.content.trim())
+    if (successfulResponses.length === 0) {
+      res.json({
+        initialResponses,
+        evaluation: null,
+        synthesis: null,
+        error: 'AI Council nemá žádnou platnou odpověď, ze které by mohl udělat závěr.',
+      })
+      return
+    }
+
     const wrapupProvider = synthesisConfig
       ? createProviderFor(synthesisConfig, apiKeys)
-      : evaluationConfig
-        ? createProviderFor(evaluationConfig, apiKeys)
-        : createProvider(apiKeys)
+      : createProvider(apiKeys)
 
     const wrapupRaw = await wrapupProvider.generate({
       messages: [
@@ -289,28 +341,29 @@ app.post('/api/council', async (req, res) => {
         { role: 'user', content: `Otázka: ${prompt}\n\n${responseSummary}` },
       ],
       maxTokens: 520,
-      thinkingLevel: synthesisConfig?.thinkingLevel ?? evaluationConfig?.thinkingLevel,
+      thinkingLevel: synthesisConfig?.thinkingLevel,
     })
 
     let evaluation = { strengths: '', weaknesses: '', missing: '', bestArgument: '' }
-    let synthesis = null
-    try {
-      const wrapupJson = wrapupRaw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
-      const parsed = JSON.parse(wrapupJson)
-      evaluation = parsed.evaluation ?? evaluation
-      synthesis = parsed.synthesis ?? null
-    } catch {
-      synthesis = {
-        summary: wrapupRaw,
-        consensus: [],
-        disagreements: [],
-        strongestArgument: '',
-        biggestRisk: '',
-        missingInfo: '',
-        nextStep: '',
-        verdict: 'nejdřív ověřit',
+    const parsed = await parseJsonWithRepair<{
+      evaluation?: typeof evaluation
+      synthesis?: {
+        summary: string
+        consensus: string[]
+        disagreements: string[]
+        strongestArgument: string
+        biggestRisk: string
+        missingInfo: string
+        nextStep: string
+        verdict: 'pokračovat' | 'upravit' | 'nejdřív ověřit' | 'zastavit'
       }
-    }
+    }>({
+      raw: wrapupRaw,
+      provider: wrapupProvider,
+      repairPrompt: 'Oprav odpověď do JSON objektu s kořenovými poli evaluation a synthesis podle zadaného schématu AI Council.',
+    })
+    evaluation = parsed.evaluation ?? evaluation
+    const synthesis = parsed.synthesis ?? null
 
     res.json({ initialResponses, evaluation, synthesis })
   } catch (err) {

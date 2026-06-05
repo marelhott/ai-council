@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import type { APIKeys, RoleConfig, WeakestAssumptionResult } from '../../types/index'
-import { useProviders } from '../ui/AIConfigPanel'
 import ModelPicker from '../ui/ModelPicker'
-import { useComposerAttachments } from '../ui/useComposerAttachments'
+import SafeMarkdown from '../ui/SafeMarkdown'
+import { TEXT_ATTACHMENT_ACCEPT, useComposerAttachments } from '../ui/useComposerAttachments'
+import { useProviders } from '../ui/useProviders'
 
 const EXAMPLES = [
   'Chci spustit službu, kde si zákazník vybere termín a systém přiřadí řemeslníka.',
@@ -29,18 +30,12 @@ interface AnalysisTurn {
 
 const DEFAULT_ANALYSIS_CONFIG: RoleConfig = {
   provider: 'anthropic',
-  model: 'claude-sonnet-4-6',
+  model: 'claude-sonnet-4-20250514',
   thinkingLevel: 'low',
 }
 
 function verdictClass(verdict: string) {
   return verdict === 'nejdřív ověřit' ? 'nejdřív-ověřit' : verdict
-}
-
-function md(text: string) {
-  return text
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\n/g, '<br/>')
 }
 
 function AnalysisView({ result, onRefine, loading }: {
@@ -60,27 +55,27 @@ function AnalysisView({ result, onRefine, loading }: {
 
       <div className="analysis-section">
         <div className="section-label">Nejslabší předpoklad</div>
-        <div className="section-content prose" dangerouslySetInnerHTML={{ __html: md(result.weakestAssumption) }} />
+        <SafeMarkdown text={result.weakestAssumption} className="section-content" />
       </div>
 
       <div className="analysis-section">
         <div className="section-label">Proč je to kritické</div>
-        <div className="section-content prose" dangerouslySetInnerHTML={{ __html: md(result.whyCritical) }} />
+        <SafeMarkdown text={result.whyCritical} className="section-content" />
       </div>
 
       <div className="analysis-section">
         <div className="section-label">Největší slepé místo</div>
-        <div className="section-content prose" dangerouslySetInnerHTML={{ __html: md(result.blindSpot) }} />
+        <SafeMarkdown text={result.blindSpot} className="section-content" />
       </div>
 
       <div className="analysis-inline-grid">
         <div className="analysis-section">
           <div className="section-label">První test</div>
-          <div className="section-content prose" dangerouslySetInnerHTML={{ __html: md(result.firstTest) }} />
+          <SafeMarkdown text={result.firstTest} className="section-content" />
         </div>
         <div className="analysis-section">
           <div className="section-label">Kill kritérium</div>
-          <div className="section-content prose" dangerouslySetInnerHTML={{ __html: md(result.killCriterion) }} />
+          <SafeMarkdown text={result.killCriterion} className="section-content" />
         </div>
       </div>
 
@@ -256,7 +251,7 @@ export default function WeakestAssumption({ apiKeys }: { apiKeys: APIKeys }) {
             className="hidden-file-input"
             type="file"
             multiple
-            accept="image/*,.pdf,.doc,.docx,.txt,.md,.csv,.json"
+            accept={TEXT_ATTACHMENT_ACCEPT}
             onChange={onFileChange}
           />
           {attachments.length > 0 && (

@@ -124,6 +124,5 @@ export interface ThreeAnswersPayload {
 export interface CouncilPayload {
   prompt: string
   roleConfigs?: Record<string, RoleConfig>
-  evaluationConfig?: RoleConfig
   synthesisConfig?: RoleConfig
 }

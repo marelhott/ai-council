@@ -2,9 +2,10 @@ import { ProviderResponseError, type AIProvider, type APIKeys, type GenerateOpti
 
 // Fallback statický seznam — /api/models vrací živý aktuální seznam
 export const OPENAI_MODELS = [
-  { id: 'gpt-5.5',      label: 'GPT-5.5',        reasoning: true  },
-  { id: 'gpt-5.4',      label: 'GPT-5.4',        reasoning: true  },
-  { id: 'gpt-5.4-mini', label: 'GPT-5.4 Mini',   reasoning: true  },
+  { id: 'gpt-5.2',      label: 'GPT-5.2',        reasoning: true  },
+  { id: 'gpt-5-mini',   label: 'GPT-5 Mini',     reasoning: true  },
+  { id: 'gpt-5-nano',   label: 'GPT-5 Nano',     reasoning: true  },
+  { id: 'gpt-4.1',      label: 'GPT-4.1',        reasoning: false },
 ]
 
 const REASONING_EFFORT: Record<string, string> = {
@@ -34,7 +35,7 @@ export class OpenAIProvider implements AIProvider {
   private apiKey?: string
 
   constructor(model?: string, keys?: APIKeys) {
-    this.model = model ?? process.env.OPENAI_MODEL ?? 'gpt-5.4'
+    this.model = model ?? process.env.OPENAI_MODEL ?? 'gpt-5.2'
     this.apiKey = keys?.openai || process.env.OPENAI_API_KEY
   }
 
@@ -44,8 +45,7 @@ export class OpenAIProvider implements AIProvider {
 
     const model = options.model ?? this.model
     const level = options.thinkingLevel ?? 'medium'
-    // Detekuj reasoning model podle ID (o1, o2, o3, o4, o5... — obecný pattern)
-    const isReasoning = /^o\d/.test(model) || OPENAI_MODELS.find(m => m.id === model)?.reasoning === true
+    const isReasoning = /^o\d/.test(model) || /^gpt-5/.test(model) || OPENAI_MODELS.find(m => m.id === model)?.reasoning === true
 
     const systemMsg = options.messages.find(m => m.role === 'system')
     const userMessages = options.messages.filter(m => m.role !== 'system')

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { RoleConfig, ThinkingLevel } from '../../types/index'
-import type { LiveProvider } from './AIConfigPanel'
+import type { LiveProvider } from './useProviders'
 
 const THINKING_LABELS: Record<ThinkingLevel, string> = {
   low: 'Rychlé',

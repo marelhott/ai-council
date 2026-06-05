@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import WeakestAssumption from './components/tabs/WeakestAssumption'
 import ThreeAnswers from './components/tabs/ThreeAnswers'
 import ThreePerspectives from './components/tabs/ThreePerspectives'
 import Council from './components/tabs/Council'
 import SettingsPanel from './components/ui/SettingsPanel'
-import { useProviders } from './components/ui/AIConfigPanel'
+import { useProviders } from './components/ui/useProviders'
 import type { APIKeys } from './types/index'
 import './index.css'
 
@@ -22,23 +22,24 @@ const STORAGE_KEY = 'ai-council-api-keys'
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('three')
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [apiKeys, setApiKeys] = useState<APIKeys>({ openai: '', anthropic: '', gemini: '' })
-  const providers = useProviders(apiKeys)
-
-  useEffect(() => {
+  const [apiKeys, setApiKeys] = useState<APIKeys>(() => {
+    const emptyKeys = { openai: '', anthropic: '', gemini: '' }
     const saved = window.localStorage.getItem(STORAGE_KEY)
-    if (!saved) return
+    if (!saved) return emptyKeys
+
     try {
       const parsed = JSON.parse(saved) as Partial<APIKeys>
-      setApiKeys({
+      return {
         openai: parsed.openai ?? '',
         anthropic: parsed.anthropic ?? '',
         gemini: parsed.gemini ?? '',
-      })
+      }
     } catch {
       window.localStorage.removeItem(STORAGE_KEY)
+      return emptyKeys
     }
-  }, [])
+  })
+  const providers = useProviders(apiKeys)
 
   return (
     <div className="app-shell">
@@ -83,16 +84,19 @@ export default function App() {
         {activeTab === 'council' && <Council apiKeys={apiKeys} />}
       </div>
 
-      <SettingsPanel
-        open={settingsOpen}
-        apiKeys={apiKeys}
-        providers={providers}
-        onClose={() => setSettingsOpen(false)}
-        onSave={keys => {
-          setApiKeys(keys)
-          window.localStorage.setItem(STORAGE_KEY, JSON.stringify(keys))
-        }}
-      />
+      {settingsOpen && (
+        <SettingsPanel
+          key={JSON.stringify(apiKeys)}
+          open={settingsOpen}
+          apiKeys={apiKeys}
+          providers={providers}
+          onClose={() => setSettingsOpen(false)}
+          onSave={keys => {
+            setApiKeys(keys)
+            window.localStorage.setItem(STORAGE_KEY, JSON.stringify(keys))
+          }}
+        />
+      )}
     </div>
   )
 }

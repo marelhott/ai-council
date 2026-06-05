@@ -6,6 +6,8 @@ export interface ComposerAttachment {
   extractedText?: string
 }
 
+export const TEXT_ATTACHMENT_ACCEPT = '.txt,.md,.csv,.json,.html,text/plain,text/markdown,text/csv,application/json,text/html'
+
 const TEXT_TYPES = [
   'text/plain',
   'text/markdown',
@@ -24,11 +26,16 @@ export function useComposerAttachments() {
 
   async function onFileChange(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? [])
-    const next = await Promise.all(files.map(async file => {
+    const readableFiles = files.filter(file =>
+      TEXT_TYPES.includes(file.type) || /\.(txt|md|json|csv|html)$/i.test(file.name),
+    )
+
+    const next = await Promise.all(readableFiles.map(async file => {
       const canRead = TEXT_TYPES.includes(file.type) || /\.(txt|md|json|csv|html)$/i.test(file.name)
       const extractedText = canRead ? await file.text().catch(() => '') : undefined
       return { file, extractedText }
     }))
+
     setAttachments(previous => [...previous, ...next])
     event.target.value = ''
   }

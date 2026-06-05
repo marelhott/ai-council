@@ -1,20 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import type { APIKeys, RoleConfig, ProviderName, ThinkingLevel } from '../../types/index'
-
-export interface LiveModel { id: string; label: string; isReasoning?: boolean }
-export interface LiveProvider {
-  provider: ProviderName
-  label: string
-  color: string
-  hasKey: boolean
-  models: LiveModel[]
-  source: 'live' | 'fallback'
-}
+import { useProviders } from './useProviders'
 
 const DEFAULT_MODELS: Record<ProviderName, string> = {
-  openai: 'gpt-5.5',
-  anthropic: 'claude-sonnet-4-6',
-  gemini: 'gemini-3.5-flash',
+  openai: 'gpt-5.2',
+  anthropic: 'claude-sonnet-4-20250514',
+  gemini: 'gemini-3-flash',
 }
 
 const THINKING_LABELS: Record<ThinkingLevel, string> = { low: 'Rychlé', medium: 'Standard', high: 'Hluboké' }
@@ -32,25 +23,6 @@ interface Props {
   configs: Record<string, RoleConfig>
   onChange: (configs: Record<string, RoleConfig>) => void
   defaultOpen?: boolean
-}
-
-async function loadProviders(apiKeys: APIKeys): Promise<LiveProvider[]> {
-  return fetch('/api/models', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ apiKeys }),
-  })
-    .then(response => response.json())
-    .then(data => data as LiveProvider[])
-    .catch(() => [] as LiveProvider[])
-}
-
-export function useProviders(apiKeys: APIKeys) {
-  const [providers, setProviders] = useState<LiveProvider[]>([])
-  useEffect(() => {
-    loadProviders(apiKeys).then(setProviders)
-  }, [apiKeys.openai, apiKeys.anthropic, apiKeys.gemini])
-  return providers
 }
 
 export default function AIConfigPanel({ apiKeys, roles, configs, onChange, defaultOpen = false }: Props) {

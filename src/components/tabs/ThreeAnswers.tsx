@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { APIKeys, ProviderName, ThinkingLevel } from '../../types/index'
-import { useProviders, type LiveProvider } from '../ui/AIConfigPanel'
-import { useComposerAttachments } from '../ui/useComposerAttachments'
+import SafeMarkdown from '../ui/SafeMarkdown'
+import { TEXT_ATTACHMENT_ACCEPT, useComposerAttachments } from '../ui/useComposerAttachments'
+import { useProviders, type LiveProvider } from '../ui/useProviders'
 
 interface SlotConfig {
   provider: ProviderName
@@ -41,20 +42,10 @@ const THINKING_LABELS: Record<ThinkingLevel, string> = {
 }
 
 const DEFAULT_SLOTS: SlotConfig[] = [
-  { provider: 'openai', model: 'gpt-5.5', thinkingLevel: 'low' },
-  { provider: 'anthropic', model: 'claude-sonnet-4-6', thinkingLevel: 'low' },
-  { provider: 'gemini', model: 'gemini-3.5-flash', thinkingLevel: 'low' },
+  { provider: 'openai', model: 'gpt-5.2', thinkingLevel: 'low' },
+  { provider: 'anthropic', model: 'claude-sonnet-4-20250514', thinkingLevel: 'low' },
+  { provider: 'gemini', model: 'gemini-3-flash', thinkingLevel: 'low' },
 ]
-
-function renderMarkdown(text: string) {
-  return text
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\n\n/g, '</p><p>')
-    .replace(/\n/g, '<br/>')
-    .replace(/^/, '<p>')
-    .replace(/$/, '</p>')
-}
 
 function SlotSettings({
   config,
@@ -227,10 +218,7 @@ function ChatColumn({
             ) : message.role === 'assistant' && message.status === 'error' ? (
               <div className="error-msg">{message.error ?? 'Nepodařilo se vygenerovat odpověď.'}</div>
             ) : (
-              <div
-                className={`prose thread-message-content ${message.role === 'user' ? 'thread-message-user' : ''}`}
-                dangerouslySetInnerHTML={{ __html: renderMarkdown(message.content) }}
-              />
+              <SafeMarkdown text={message.content} className={`thread-message-content ${message.role === 'user' ? 'thread-message-user' : ''}`} />
             )}
           </div>
         ))}
@@ -315,7 +303,10 @@ export default function ThreeAnswers({ apiKeys }: { apiKeys: APIKeys }) {
             }),
           })
 
-          if (!response.ok) throw new Error(`HTTP ${response.status}`)
+          if (!response.ok) {
+            const payload = await response.json().catch(() => null) as { error?: string } | null
+            throw new Error(payload?.error ?? `HTTP ${response.status}`)
+          }
           const data: { content: string } = await response.json()
 
           setSlots(previous =>
@@ -326,7 +317,7 @@ export default function ThreeAnswers({ apiKeys }: { apiKeys: APIKeys }) {
               return { ...currentSlot, loading: false, messages: nextMessages }
             })
           )
-        } catch {
+        } catch (error) {
           setSlots(previous =>
             previous.map((currentSlot, slotIndex) => {
               if (slotIndex !== index) return currentSlot
@@ -335,7 +326,7 @@ export default function ThreeAnswers({ apiKeys }: { apiKeys: APIKeys }) {
                 role: 'assistant',
                 content: '',
                 status: 'error',
-                error: 'Nepodařilo se vygenerovat odpověď.',
+                error: error instanceof Error ? error.message : 'Nepodařilo se vygenerovat odpověď.',
               }
               return { ...currentSlot, loading: false, messages: nextMessages }
             })
@@ -388,7 +379,7 @@ export default function ThreeAnswers({ apiKeys }: { apiKeys: APIKeys }) {
             className="hidden-file-input"
             type="file"
             multiple
-            accept="image/*,.pdf,.doc,.docx,.txt,.md,.csv,.json"
+            accept={TEXT_ATTACHMENT_ACCEPT}
             onChange={onFileChange}
           />
           {attachments.length > 0 && (

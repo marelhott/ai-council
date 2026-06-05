@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { APIKeys, ConversationRound, RoleConfig, RoleResponse, ThinkingLevel } from '../../types/index'
-import { useProviders, type LiveProvider } from '../ui/AIConfigPanel'
-import { useComposerAttachments } from '../ui/useComposerAttachments'
+import SafeMarkdown from '../ui/SafeMarkdown'
+import { TEXT_ATTACHMENT_ACCEPT, useComposerAttachments } from '../ui/useComposerAttachments'
+import { useProviders, type LiveProvider } from '../ui/useProviders'
 
 const PROVIDER_COLORS: Record<string, string> = {
   openai: '#10a37f',
@@ -29,19 +30,9 @@ const THINKING_LABELS: Record<ThinkingLevel, string> = {
 }
 
 const DEFAULT_CONFIGS: Record<string, RoleConfig> = {
-  practical: { provider: 'openai', model: 'gpt-5.5', thinkingLevel: 'low' },
-  critical: { provider: 'anthropic', model: 'claude-sonnet-4-6', thinkingLevel: 'low' },
-  creative: { provider: 'gemini', model: 'gemini-3.5-flash', thinkingLevel: 'low' },
-}
-
-function renderMarkdown(text: string) {
-  return text
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/^#{1,4} (.+)$/gm, '<strong>$1</strong>')
-    .replace(/\n\n/g, '</p><p>')
-    .replace(/\n/g, '<br/>')
-    .replace(/^/, '<p>')
-    .replace(/$/, '</p>')
+  practical: { provider: 'openai', model: 'gpt-5.2', thinkingLevel: 'low' },
+  critical: { provider: 'anthropic', model: 'claude-sonnet-4-20250514', thinkingLevel: 'low' },
+  creative: { provider: 'gemini', model: 'gemini-3-flash', thinkingLevel: 'low' },
 }
 
 function RoleSettings({
@@ -236,7 +227,7 @@ function RoleColumn({
                 ) : response.status === 'error' ? (
                   <div className="error-msg">{response.error}</div>
                 ) : (
-                  <div className="prose thread-message-content" dangerouslySetInnerHTML={{ __html: renderMarkdown(response.content) }} />
+                  <SafeMarkdown text={response.content} className="thread-message-content" />
                 )}
               </div>
             </div>
@@ -294,7 +285,9 @@ export default function ThreePerspectives({ apiKeys }: { apiKeys: APIKeys }) {
     const history = isFollowUp
       ? rounds.flatMap(round => [
           { role: 'user' as const, content: round.userPrompt, persona: 'all' },
-          ...round.responses.map(response => ({
+          ...round.responses
+            .filter(response => response.status === 'done' && response.content.trim())
+            .map(response => ({
             role: 'assistant' as const,
             content: response.content,
             persona: response.roleName,
@@ -325,12 +318,15 @@ export default function ThreePerspectives({ apiKeys }: { apiKeys: APIKeys }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: promptWithAttachments, history, roleConfigs, apiKeys }),
       })
-      if (!response.ok) throw new Error('Server error')
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null) as { error?: string } | null
+        throw new Error(payload?.error ?? 'Server error')
+      }
       const data: { responses: RoleResponse[] } = await response.json()
       setRounds(previous =>
         previous.map(round => (round.id === pendingRound.id ? { ...round, responses: data.responses } : round))
       )
-    } catch {
+    } catch (error) {
       setRounds(previous =>
         previous.map(round =>
           round.id === pendingRound.id
@@ -339,7 +335,7 @@ export default function ThreePerspectives({ apiKeys }: { apiKeys: APIKeys }) {
                 responses: round.responses.map(responseItem => ({
                   ...responseItem,
                   status: 'error',
-                  error: 'Tato odpověď se nepodařila vygenerovat.',
+                  error: error instanceof Error ? error.message : 'Tato odpověď se nepodařila vygenerovat.',
                 })),
               }
             : round
@@ -408,7 +404,7 @@ export default function ThreePerspectives({ apiKeys }: { apiKeys: APIKeys }) {
             className="hidden-file-input"
             type="file"
             multiple
-            accept="image/*,.pdf,.doc,.docx,.txt,.md,.csv,.json"
+            accept={TEXT_ATTACHMENT_ACCEPT}
             onChange={onFileChange}
           />
           {attachments.length > 0 && (

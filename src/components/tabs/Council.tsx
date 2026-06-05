@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import type { APIKeys, CouncilSession, CouncilSynthesis, RoleConfig } from '../../types/index'
-import { useProviders } from '../ui/AIConfigPanel'
 import ModelPicker from '../ui/ModelPicker'
-import { useComposerAttachments } from '../ui/useComposerAttachments'
+import SafeMarkdown from '../ui/SafeMarkdown'
+import { TEXT_ATTACHMENT_ACCEPT, useComposerAttachments } from '../ui/useComposerAttachments'
+import { useProviders } from '../ui/useProviders'
 
 const COUNCIL_ROLES_CONFIG = [
   { key: 'practitioner', label: 'Praktik' },
@@ -17,14 +18,15 @@ const ROLE_COLORS: Record<string, string> = {
 }
 
 const DEFAULT_COUNCIL_CONFIGS: Record<string, RoleConfig> = {
-  practitioner: { provider: 'openai', model: 'gpt-5.5', thinkingLevel: 'low' },
-  skeptic: { provider: 'anthropic', model: 'claude-sonnet-4-6', thinkingLevel: 'low' },
-  strategist: { provider: 'gemini', model: 'gemini-3.5-flash', thinkingLevel: 'low' },
+  practitioner: { provider: 'openai', model: 'gpt-5.2', thinkingLevel: 'low' },
+  skeptic: { provider: 'anthropic', model: 'claude-sonnet-4-20250514', thinkingLevel: 'low' },
+  strategist: { provider: 'gemini', model: 'gemini-3-flash', thinkingLevel: 'low' },
 }
 
-const DEFAULT_WRAPUP_CONFIGS: Record<string, RoleConfig> = {
-  evaluator: { provider: 'anthropic', model: 'claude-sonnet-4-6', thinkingLevel: 'low' },
-  synthesis: { provider: 'openai', model: 'gpt-5.5', thinkingLevel: 'low' },
+const DEFAULT_WRAPUP_CONFIG: RoleConfig = {
+  provider: 'openai',
+  model: 'gpt-5.2',
+  thinkingLevel: 'low',
 }
 
 const LOADING_MESSAGES: Record<string, string> = {
@@ -36,15 +38,6 @@ interface CouncilTurn {
   id: string
   prompt: string
   session: CouncilSession
-}
-
-function renderMarkdown(text: string) {
-  return text
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\n\n/g, '</p><p>')
-    .replace(/\n/g, '<br/>')
-    .replace(/^/, '<p>')
-    .replace(/$/, '</p>')
 }
 
 function verdictClass(verdict: string) {
@@ -140,29 +133,22 @@ function RoleConfigStrip({
 }
 
 function WrapupConfigStrip({
-  configs,
+  config,
   providers,
   onChange,
 }: {
-  configs: Record<string, RoleConfig>
+  config: RoleConfig
   providers: ReturnType<typeof useProviders>
-  onChange: (key: string, config: RoleConfig) => void
+  onChange: (config: RoleConfig) => void
 }) {
   return (
     <div className="single-config-strip">
       <div className="inline-role-config">
         <div className="provider-badge">
-          <span className="provider-dot" style={{ background: '#6b7280' }} />
-          <span>Vyhodnocení</span>
-        </div>
-        <ModelPicker config={configs.evaluator} providers={providers} onChange={config => onChange('evaluator', config)} />
-      </div>
-      <div className="inline-role-config">
-        <div className="provider-badge">
           <span className="provider-dot" style={{ background: '#111827' }} />
           <span>Závěr</span>
         </div>
-        <ModelPicker config={configs.synthesis} providers={providers} onChange={config => onChange('synthesis', config)} />
+        <ModelPicker config={config} providers={providers} onChange={onChange} />
       </div>
     </div>
   )
@@ -172,7 +158,7 @@ export default function Council({ apiKeys }: { apiKeys: APIKeys }) {
   const providers = useProviders(apiKeys)
   const [input, setInput] = useState('')
   const [roleConfigs, setRoleConfigs] = useState<Record<string, RoleConfig>>(DEFAULT_COUNCIL_CONFIGS)
-  const [wrapupConfigs, setWrapupConfigs] = useState<Record<string, RoleConfig>>(DEFAULT_WRAPUP_CONFIGS)
+  const [wrapupConfig, setWrapupConfig] = useState<RoleConfig>(DEFAULT_WRAPUP_CONFIG)
   const [turns, setTurns] = useState<CouncilTurn[]>([])
   const [running, setRunning] = useState(false)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -201,17 +187,10 @@ export default function Council({ apiKeys }: { apiKeys: APIKeys }) {
       }
       return next
     })
-    setWrapupConfigs(previous => {
-      const next = { ...previous }
-      for (const key of Object.keys(next)) {
-        const current = next[key]
-        const provider = providers.find(item => item.provider === current.provider)
-        if (!provider) continue
-        if (!provider.models.some(model => model.id === current.model)) {
-          next[key] = { ...current, model: provider.models[0]?.id ?? current.model }
-        }
-      }
-      return next
+    setWrapupConfig(previous => {
+      const provider = providers.find(item => item.provider === previous.provider)
+      if (!provider || provider.models.some(model => model.id === previous.model)) return previous
+      return { ...previous, model: provider.models[0]?.id ?? previous.model }
     })
   }, [providers])
 
@@ -250,8 +229,7 @@ export default function Council({ apiKeys }: { apiKeys: APIKeys }) {
         body: JSON.stringify({
           prompt: promptWithAttachments,
           roleConfigs,
-          evaluationConfig: wrapupConfigs.evaluator,
-          synthesisConfig: wrapupConfigs.synthesis,
+          synthesisConfig: wrapupConfig,
           apiKeys,
         }),
       })
@@ -263,7 +241,8 @@ export default function Council({ apiKeys }: { apiKeys: APIKeys }) {
       const data = await response.json() as {
         initialResponses: CouncilSession['initialResponses']
         evaluation?: CouncilSession['evaluations'][number]
-        synthesis: CouncilSynthesis
+        synthesis: CouncilSynthesis | null
+        error?: string
       }
 
       setTurns(previous =>
@@ -277,6 +256,7 @@ export default function Council({ apiKeys }: { apiKeys: APIKeys }) {
                   initialResponses: data.initialResponses,
                   evaluations: data.evaluation ? [data.evaluation] : [],
                   synthesis: data.synthesis,
+                  error: data.error ?? null,
                 },
               }
             : turn
@@ -334,9 +314,9 @@ export default function Council({ apiKeys }: { apiKeys: APIKeys }) {
                 onChange={(key, config) => setRoleConfigs(previous => ({ ...previous, [key]: config }))}
               />
               <WrapupConfigStrip
-                configs={wrapupConfigs}
+                config={wrapupConfig}
                 providers={providers}
-                onChange={(key, config) => setWrapupConfigs(previous => ({ ...previous, [key]: config }))}
+                onChange={setWrapupConfig}
               />
             </div>
           ) : (
@@ -373,7 +353,7 @@ export default function Council({ apiKeys }: { apiKeys: APIKeys }) {
                           {response.status === 'error' ? (
                             <div className="error-msg">{response.error ?? 'Tato odpověď se nepodařila vygenerovat.'}</div>
                           ) : (
-                            <div className="prose section-content" dangerouslySetInnerHTML={{ __html: renderMarkdown(response.content) }} />
+                            <SafeMarkdown text={response.content} className="section-content" />
                           )}
                         </div>
                       ))}
@@ -410,7 +390,7 @@ export default function Council({ apiKeys }: { apiKeys: APIKeys }) {
             className="hidden-file-input"
             type="file"
             multiple
-            accept="image/*,.pdf,.doc,.docx,.txt,.md,.csv,.json"
+            accept={TEXT_ATTACHMENT_ACCEPT}
             onChange={onFileChange}
           />
           {attachments.length > 0 && (
@@ -430,9 +410,9 @@ export default function Council({ apiKeys }: { apiKeys: APIKeys }) {
                 onChange={(key, config) => setRoleConfigs(previous => ({ ...previous, [key]: config }))}
               />
               <WrapupConfigStrip
-                configs={wrapupConfigs}
+                config={wrapupConfig}
                 providers={providers}
-                onChange={(key, config) => setWrapupConfigs(previous => ({ ...previous, [key]: config }))}
+                onChange={setWrapupConfig}
               />
             </>
           )}

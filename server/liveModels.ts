@@ -29,31 +29,34 @@ export interface APIKeys {
 }
 
 // ---- Curated fallbacks — nejnovější modely vždy první ----
-// Aktualizováno: červen 2025
+// Aktualizováno: červen 2026
 
 const FALLBACK_OPENAI: ModelInfo[] = [
-  { id: 'gpt-5.5',      label: 'GPT-5.5',      provider: 'openai', isReasoning: true },
-  { id: 'gpt-5.4',      label: 'GPT-5.4',      provider: 'openai', isReasoning: true },
-  { id: 'gpt-5.4-mini', label: 'GPT-5.4 Mini', provider: 'openai', isReasoning: true },
+  { id: 'gpt-5.2',    label: 'GPT-5.2',    provider: 'openai', isReasoning: true },
+  { id: 'gpt-5-mini', label: 'GPT-5 Mini', provider: 'openai', isReasoning: true },
+  { id: 'gpt-5-nano', label: 'GPT-5 Nano', provider: 'openai', isReasoning: true },
+  { id: 'gpt-4.1',    label: 'GPT-4.1',    provider: 'openai' },
 ]
 
 const FALLBACK_ANTHROPIC: ModelInfo[] = [
-  { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', provider: 'anthropic' },
-  { id: 'claude-opus-4-6',   label: 'Claude Opus 4.6',   provider: 'anthropic' },
-  { id: 'claude-haiku-4-5',  label: 'Claude Haiku 4.5',  provider: 'anthropic' },
+  { id: 'claude-sonnet-4-20250514',  label: 'Claude Sonnet 4',  provider: 'anthropic' },
+  { id: 'claude-opus-4-1-20250805',  label: 'Claude Opus 4.1',  provider: 'anthropic' },
+  { id: 'claude-opus-4-20250514',    label: 'Claude Opus 4',    provider: 'anthropic' },
+  { id: 'claude-3-5-haiku-20241022', label: 'Claude Haiku 3.5', provider: 'anthropic' },
 ]
 
 const FALLBACK_GEMINI: ModelInfo[] = [
-  { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash', provider: 'gemini' },
-  { id: 'gemini-3.1-pro',   label: 'Gemini 3.1 Pro',   provider: 'gemini' },
-  { id: 'gemini-3-flash',   label: 'Gemini 3 Flash',   provider: 'gemini' },
+  { id: 'gemini-3-flash',       label: 'Gemini 3 Flash',       provider: 'gemini' },
+  { id: 'gemini-3-pro-preview', label: 'Gemini 3 Pro Preview', provider: 'gemini' },
+  { id: 'gemini-2.5-flash',     label: 'Gemini 2.5 Flash',     provider: 'gemini' },
+  { id: 'gemini-2.5-pro',       label: 'Gemini 2.5 Pro',       provider: 'gemini' },
 ]
 
 // ---- Model ID → friendly label heuristics ----
 
 function openAILabel(id: string): string {
   const map: Record<string, string> = {
-    'gpt-5.5': 'GPT-5.5', 'gpt-5.4': 'GPT-5.4', 'gpt-5.4-mini': 'GPT-5.4 Mini', 'gpt-5.4-nano': 'GPT-5.4 Nano',
+    'gpt-5.2': 'GPT-5.2', 'gpt-5.2-chat-latest': 'GPT-5.2 Chat', 'gpt-5-mini': 'GPT-5 Mini', 'gpt-5-nano': 'GPT-5 Nano',
     'gpt-4.1': 'GPT-4.1', 'gpt-4.1-mini': 'GPT-4.1 Mini', 'gpt-4.1-nano': 'GPT-4.1 Nano',
     'gpt-4o': 'GPT-4o', 'gpt-4o-mini': 'GPT-4o Mini',
     'o1': 'o1', 'o1-mini': 'o1 Mini', 'o1-pro': 'o1 Pro',
@@ -105,7 +108,7 @@ async function fetchOpenAIModels(keys?: APIKeys): Promise<ModelInfo[]> {
       id: m.id,
       label: openAILabel(m.id),
       provider: 'openai' as const,
-      isReasoning: REASONING_PATTERN.test(m.id),
+      isReasoning: REASONING_PATTERN.test(m.id) || m.id.startsWith('gpt-5'),
       created: m.created ?? 0,
     }))
 
@@ -120,7 +123,12 @@ async function fetchOpenAIModels(keys?: APIKeys): Promise<ModelInfo[]> {
   })
 
   // Odstraň 'created' z výstupu
-  const result = models.map(({ created: _c, ...m }) => m)
+  const result = models.map(model => ({
+    id: model.id,
+    label: model.label,
+    provider: model.provider,
+    isReasoning: model.isReasoning,
+  }))
   return result.length >= 2 ? result : FALLBACK_OPENAI
 }
 

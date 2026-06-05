@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type { APIKeys } from '../../types/index'
-import type { LiveProvider } from './AIConfigPanel'
+import type { LiveProvider } from './useProviders'
 
 interface Props {
   apiKeys: APIKeys
@@ -18,10 +18,6 @@ const LABELS: Record<keyof APIKeys, string> = {
 
 export default function SettingsPanel({ apiKeys, open, providers, onClose, onSave }: Props) {
   const [draft, setDraft] = useState<APIKeys>(apiKeys)
-
-  useEffect(() => {
-    setDraft(apiKeys)
-  }, [apiKeys, open])
 
   if (!open) return null
 

@@ -74,6 +74,13 @@ export default function Brainstorm({ apiKeys }: { apiKeys: APIKeys }) {
 
     const actualTurnId = turnId ?? crypto.randomUUID()
     const promptWithAttachments = appendAttachmentContext(prompt)
+    const loadingMessage: BrainstormMessage = {
+      role: 'assistant',
+      speaker: 'openai',
+      speakerLabel: 'Brainstorm',
+      content: '',
+      status: 'loading',
+    }
     const pendingMessages: BrainstormMessage[] = turnId
       ? []
       : [
@@ -84,6 +91,7 @@ export default function Brainstorm({ apiKeys }: { apiKeys: APIKeys }) {
         content: prompt,
         status: 'done',
       },
+      loadingMessage,
     ]
 
     try {
@@ -92,6 +100,13 @@ export default function Brainstorm({ apiKeys }: { apiKeys: APIKeys }) {
 
       if (turnId) {
         setContinuing(turnId)
+        setTurns(previous =>
+          previous.map(turn =>
+            turn.id === actualTurnId
+              ? { ...turn, messages: [...turn.messages, loadingMessage] }
+              : turn,
+          ),
+        )
       } else {
         setTurns(previous => [...previous, { id: actualTurnId, prompt, messages: pendingMessages }])
       }
@@ -116,7 +131,12 @@ export default function Brainstorm({ apiKeys }: { apiKeys: APIKeys }) {
       setTurns(previous =>
         previous.map(turn =>
           turn.id === actualTurnId
-            ? { ...turn, messages: turnId ? [...turn.messages, ...data.messages] : [pendingMessages[0], ...data.messages] }
+            ? {
+                ...turn,
+                messages: turnId
+                  ? [...turn.messages.filter(message => message.status !== 'loading'), ...data.messages]
+                  : [pendingMessages[0], ...data.messages],
+              }
             : turn,
         ),
       )
@@ -128,7 +148,7 @@ export default function Brainstorm({ apiKeys }: { apiKeys: APIKeys }) {
               ? {
                   ...turn,
                   messages: [
-                    ...turn.messages,
+                    ...turn.messages.filter(message => message.status !== 'loading'),
                     {
                       role: 'assistant',
                       speaker: 'openai',
@@ -241,7 +261,12 @@ export default function Brainstorm({ apiKeys }: { apiKeys: APIKeys }) {
                       {message.speakerLabel}
                       {message.modelName ? ` · ${message.modelName}` : ''}
                     </div>
-                    {message.status === 'error' ? (
+                    {message.status === 'loading' ? (
+                      <div className="loading-state">
+                        <span className="spinner" />
+                        <span>Modely si teď odpověď přehazují mezi sebou…</span>
+                      </div>
+                    ) : message.status === 'error' ? (
                       <div className="error-msg">{message.error ?? 'Nepodařilo se vygenerovat odpověď.'}</div>
                     ) : (
                       <SafeMarkdown

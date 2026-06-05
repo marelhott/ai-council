@@ -1,5 +1,5 @@
 export type Mode = 'weakest_assumption' | 'three_answers' | 'council'
-export type ResponseStatus = 'pending' | 'done' | 'error'
+export type ResponseStatus = 'pending' | 'loading' | 'done' | 'error'
 export type Verdict = 'pokračovat' | 'upravit' | 'nejdřív ověřit' | 'zastavit'
 export type ProviderName = 'openai' | 'anthropic' | 'gemini'
 export type ThinkingLevel = 'low' | 'medium' | 'high'

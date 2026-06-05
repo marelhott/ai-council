@@ -1,21 +1,42 @@
-import { useState } from 'react'
-import type { CouncilSession, CouncilSynthesis, RoleConfig } from '../../types/index'
-import AIConfigPanel from '../ui/AIConfigPanel'
+import { useEffect, useRef, useState } from 'react'
+import type { APIKeys, CouncilSession, CouncilSynthesis, RoleConfig, ThinkingLevel } from '../../types/index'
+import { useProviders, type LiveProvider } from '../ui/AIConfigPanel'
+import { useComposerAttachments } from '../ui/useComposerAttachments'
 
 const COUNCIL_ROLES_CONFIG = [
   { key: 'practitioner', label: 'Praktik' },
-  { key: 'skeptic',      label: 'Skeptik' },
-  { key: 'strategist',   label: 'Stratég' },
+  { key: 'skeptic', label: 'Skeptik' },
+  { key: 'strategist', label: 'Stratég' },
 ]
 
-const PROVIDER_COLORS: Record<string, string> = {
-  openai: '#10a37f', anthropic: '#d97706', gemini: '#4285f4', claude: '#d97706', mock: '#6b7280',
+const ROLE_COLORS: Record<string, string> = {
+  practitioner: '#10b981',
+  skeptic: '#ef4444',
+  strategist: '#8b5cf6',
+}
+
+const THINKING_LABELS: Record<ThinkingLevel, string> = {
+  low: 'Rychlé',
+  medium: 'Standard',
+  high: 'Hluboké',
 }
 
 const DEFAULT_COUNCIL_CONFIGS: Record<string, RoleConfig> = {
-  practitioner: { provider: 'mock', model: 'mock-cs-v1', thinkingLevel: 'medium' },
-  skeptic:      { provider: 'mock', model: 'mock-cs-v1', thinkingLevel: 'medium' },
-  strategist:   { provider: 'mock', model: 'mock-cs-v1', thinkingLevel: 'medium' },
+  practitioner: { provider: 'openai', model: 'gpt-5.5', thinkingLevel: 'medium' },
+  skeptic: { provider: 'anthropic', model: 'claude-sonnet-4-6', thinkingLevel: 'medium' },
+  strategist: { provider: 'gemini', model: 'gemini-3.5-flash', thinkingLevel: 'medium' },
+}
+
+const LOADING_MESSAGES: Record<string, string> = {
+  initial_responses: 'Rada přemýšlí…',
+  evaluating: 'Rádci si navzájem hodnotí odpovědi…',
+  synthesizing: 'Předseda rady připravuje závěr…',
+}
+
+interface CouncilTurn {
+  id: string
+  prompt: string
+  session: CouncilSession
 }
 
 function renderMarkdown(text: string) {
@@ -27,335 +48,496 @@ function renderMarkdown(text: string) {
     .replace(/$/, '</p>')
 }
 
-function verdictClass(v: string) {
-  return v === 'nejdřív ověřit' ? 'nejdřív-ověřit' : v
+function verdictClass(verdict: string) {
+  return verdict === 'nejdřív ověřit' ? 'nejdřív-ověřit' : verdict
 }
 
-function Collapsible({ title, children, defaultOpen = false }: {
-  title: string
-  children: React.ReactNode
-  defaultOpen?: boolean
+function RoleSettings({
+  config,
+  providers,
+  onChange,
+}: {
+  config: RoleConfig
+  providers: LiveProvider[]
+  onChange: (config: RoleConfig) => void
 }) {
-  const [open, setOpen] = useState(defaultOpen)
+  const [openMenu, setOpenMenu] = useState<'model' | 'thinking' | null>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const providerData = providers.find(provider => provider.provider === config.provider)
+  const models = providerData?.models ?? []
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (!menuRef.current?.contains(event.target as Node)) setOpenMenu(null)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  function setProvider(providerName: RoleConfig['provider']) {
+    const provider = providers.find(item => item.provider === providerName)
+    const model = provider?.models[0]?.id ?? config.model
+    onChange({ ...config, provider: providerName, model })
+  }
+
   return (
-    <div className="collapsible-section">
-      <button className="collapsible-trigger" onClick={() => setOpen(o => !o)}>
-        <span>{title}</span>
-        <svg className={`chevron ${open ? 'open' : ''}`} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M19 9l-7 7-7-7"/>
-        </svg>
-      </button>
-      {open && <div className="collapsible-content">{children}</div>}
+    <div className="stream-config-row" ref={menuRef}>
+      <div className="stream-config">
+        <button type="button" className="stream-text-trigger" onClick={() => setOpenMenu(current => current === 'model' ? null : 'model')}>
+          {config.model.replace(/^gpt-/, 'GPT-').replace('claude-', 'Claude ').replace(/-/g, ' ')}
+        </button>
+        {openMenu === 'model' && (
+        <div className="stream-config-panel">
+          <div className="stream-config-group">
+            <div className="stream-config-label">Provider</div>
+            <div className="menu-list">
+              {providers.map(provider => (
+                <button
+                  key={provider.provider}
+                  type="button"
+                  className={`menu-option ${config.provider === provider.provider ? 'selected' : ''}`}
+                  onClick={() => {
+                    setProvider(provider.provider)
+                    setOpenMenu(null)
+                  }}
+                >
+                  <span>{provider.label}</span>
+                  <span className={`connection-status inline ${provider.source === 'live' && provider.hasKey ? 'connected' : 'disconnected'}`}>
+                    <span className="provider-dot" />
+                  </span>
+                  {config.provider === provider.provider && <span className="menu-check">✓</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="stream-config-group">
+            <div className="stream-config-label">Model</div>
+            <div className="menu-list">
+              {models.map(model => (
+                <button
+                key={model.id}
+                type="button"
+                className={`menu-option ${config.model === model.id ? 'selected' : ''}`}
+                onClick={() => {
+                  onChange({ ...config, model: model.id })
+                  setOpenMenu(null)
+                }}
+              >
+                  <span>{model.label}</span>
+                  {config.model === model.id && <span className="menu-check">✓</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        )}
+      </div>
+
+      <div className="stream-config">
+        <button type="button" className="stream-text-trigger" onClick={() => setOpenMenu(current => current === 'thinking' ? null : 'thinking')}>
+          {THINKING_LABELS[config.thinkingLevel]}
+        </button>
+        {openMenu === 'thinking' && (
+        <div className="stream-config-panel">
+          <div className="stream-config-group">
+            <div className="stream-config-label">Uvažování</div>
+            <div className="menu-list">
+              {(['low', 'medium', 'high'] as ThinkingLevel[]).map(level => (
+                <button
+                key={level}
+                type="button"
+                className={`menu-option ${config.thinkingLevel === level ? 'selected' : ''}`}
+                onClick={() => {
+                  onChange({ ...config, thinkingLevel: level })
+                  setOpenMenu(null)
+                }}
+              >
+                  <span>{THINKING_LABELS[level]}</span>
+                  {config.thinkingLevel === level && <span className="menu-check">✓</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        )}
+      </div>
     </div>
   )
 }
 
 function SynthesisView({ synthesis }: { synthesis: CouncilSynthesis }) {
   return (
-    <div className="synthesis-card">
-      <div className="synthesis-title">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-        </svg>
-        Závěr rady
-      </div>
-
-      {/* Verdict */}
-      <div className={`verdict-banner ${verdictClass(synthesis.verdict)}`} style={{ marginBottom: 20 }}>
+    <div className="analysis-flow">
+      <div className={`verdict-banner ${verdictClass(synthesis.verdict)}`}>
         <div>
           <div className="verdict-label">Finální verdikt</div>
           <div className="verdict-text">{synthesis.verdict.toUpperCase()}</div>
         </div>
       </div>
 
-      <p style={{ fontSize: 15, lineHeight: 1.65, color: 'var(--text)', marginBottom: 20 }}>
-        {synthesis.summary}
-      </p>
+      <div className="analysis-section">
+        <div className="section-label">Shrnutí</div>
+        <div className="section-content">{synthesis.summary}</div>
+      </div>
 
-      <div className="synthesis-grid">
-        <div className="synthesis-item">
-          <div className="label">Kde se rádci shodli</div>
+      <div className="analysis-inline-grid">
+        <div className="analysis-section">
+          <div className="section-label">Shoda rady</div>
           <ul className="bullet-list">
-            {synthesis.consensus.map((c, i) => <li key={i}>{c}</li>)}
+            {synthesis.consensus.map((item, index) => <li key={index}>{item}</li>)}
           </ul>
         </div>
-
-        <div className="synthesis-item">
-          <div className="label">Kde se rozcházejí</div>
+        <div className="analysis-section">
+          <div className="section-label">Rozpory</div>
           <ul className="bullet-list">
-            {synthesis.disagreements.map((d, i) => <li key={i}>{d}</li>)}
+            {synthesis.disagreements.map((item, index) => <li key={index}>{item}</li>)}
           </ul>
         </div>
+      </div>
 
-        <div className="synthesis-item">
-          <div className="label">Nejsilnější argument</div>
-          <div className="value">{synthesis.strongestArgument}</div>
-        </div>
+      <div className="analysis-section">
+        <div className="section-label">Nejsilnější argument</div>
+        <div className="section-content">{synthesis.strongestArgument}</div>
+      </div>
 
-        <div className="synthesis-item">
-          <div className="label">Největší riziko</div>
-          <div className="value">{synthesis.biggestRisk}</div>
-        </div>
+      <div className="analysis-section">
+        <div className="section-label">Největší riziko</div>
+        <div className="section-content">{synthesis.biggestRisk}</div>
+      </div>
 
-        <div className="synthesis-item full">
-          <div className="label">Co chybí vědět</div>
-          <div className="value">{synthesis.missingInfo}</div>
-        </div>
+      <div className="analysis-section">
+        <div className="section-label">Co ještě chybí vědět</div>
+        <div className="section-content">{synthesis.missingInfo}</div>
+      </div>
 
-        <div className="synthesis-item full">
-          <div className="label" style={{ color: 'var(--accent)' }}>Doporučený další krok</div>
-          <div className="value" style={{ fontWeight: 600, color: 'var(--text-h)' }}>{synthesis.nextStep}</div>
-        </div>
+      <div className="next-step-box">
+        <div className="section-label">Doporučený další krok</div>
+        <div className="section-content">{synthesis.nextStep}</div>
       </div>
     </div>
   )
 }
 
-const STEP_LABELS = ['Nezávislé odpovědi', 'Vzájemné hodnocení', 'Závěr rady']
-
-function StepIndicator({ currentStep }: { currentStep: number }) {
+function RoleConfigStrip({
+  configs,
+  providers,
+  onChange,
+}: {
+  configs: Record<string, RoleConfig>
+  providers: LiveProvider[]
+  onChange: (key: string, config: RoleConfig) => void
+}) {
   return (
-    <div className="council-steps">
-      {STEP_LABELS.map((label, i) => (
-        <div
-          key={i}
-          className={`council-step ${i < currentStep ? 'done' : i === currentStep ? 'active' : ''}`}
-        >
-          <span className="council-step-num">
-            {i < currentStep ? '✓' : i + 1}
-          </span>
-          {label}
+    <div className="inline-role-configs">
+      {COUNCIL_ROLES_CONFIG.map(role => (
+        <div key={role.key} className="inline-role-config">
+          <div className="provider-badge">
+            <span className="provider-dot" style={{ background: ROLE_COLORS[role.key] ?? '#6b7280' }} />
+            <span>{role.label}</span>
+          </div>
+          <RoleSettings
+            config={configs[role.key]}
+            providers={providers}
+            onChange={config => onChange(role.key, config)}
+          />
         </div>
       ))}
     </div>
   )
 }
 
-const LOADING_MESSAGES: Record<string, string> = {
-  initial_responses: 'Rada přemýšlí…',
-  evaluating: 'Rádci si navzájem hodnotí odpovědi…',
-  synthesizing: 'Předseda rady připravuje závěr…',
-}
-
-export default function Council() {
-  const [prompt, setPrompt] = useState('')
+export default function Council({ apiKeys }: { apiKeys: APIKeys }) {
+  const providers = useProviders(apiKeys)
+  const [input, setInput] = useState('')
   const [roleConfigs, setRoleConfigs] = useState<Record<string, RoleConfig>>(DEFAULT_COUNCIL_CONFIGS)
-  const [session, setSession] = useState<CouncilSession>({
-    status: 'idle',
-    initialResponses: [],
-    evaluations: [],
-    synthesis: null,
-    error: null,
-  })
+  const [turns, setTurns] = useState<CouncilTurn[]>([])
+  const [running, setRunning] = useState(false)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const bottomRef = useRef<HTMLDivElement>(null)
+  const {
+    attachments,
+    inputRef: attachmentInputRef,
+    openPicker,
+    onFileChange,
+    removeAttachment,
+    clearAttachments,
+    appendAttachmentContext,
+  } = useComposerAttachments()
 
-  const currentStep =
-    session.status === 'idle' || session.status === 'initial_responses' ? 0
-    : session.status === 'evaluating' ? 1
-    : session.status === 'synthesizing' || session.status === 'done' ? 2
-    : 0
+  useEffect(() => {
+    if (!providers.length) return
+    setRoleConfigs(previous => {
+      const next = { ...previous }
+      for (const role of COUNCIL_ROLES_CONFIG) {
+        const current = next[role.key]
+        const provider = providers.find(item => item.provider === current.provider)
+        if (!provider) continue
+        if (!provider.models.some(model => model.id === current.model)) {
+          next[role.key] = { ...current, model: provider.models[0]?.id ?? current.model }
+        }
+      }
+      return next
+    })
+  }, [providers])
+
+  useEffect(() => {
+    const textarea = inputRef.current
+    if (!textarea) return
+    textarea.style.height = '0px'
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 220)}px`
+  }, [input])
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+  }, [turns.length])
 
   async function runCouncil() {
-    if (!prompt.trim()) return
+    const prompt = input.trim()
+    if (!prompt || running) return
+    const promptWithAttachments = appendAttachmentContext(prompt)
 
-    setSession({ status: 'initial_responses', initialResponses: [], evaluations: [], synthesis: null, error: null })
+    setRunning(true)
+    setInput('')
+    const turnId = crypto.randomUUID()
+    const baseSession: CouncilSession = {
+      status: 'initial_responses',
+      initialResponses: [],
+      evaluations: [],
+      synthesis: null,
+      error: null,
+    }
+    setTurns(previous => [...previous, { id: turnId, prompt, session: baseSession }])
 
     try {
-      setSession(s => ({ ...s, status: 'evaluating' }))
+      setTurns(previous =>
+        previous.map(turn =>
+          turn.id === turnId ? { ...turn, session: { ...turn.session, status: 'evaluating' } } : turn
+        )
+      )
 
-      const res = await fetch('/api/council', {
+      const response = await fetch('/api/council', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, roleConfigs }),
+        body: JSON.stringify({ prompt: promptWithAttachments, roleConfigs, apiKeys }),
       })
+      if (!response.ok) throw new Error('Server error')
+      const data = await response.json()
 
-      if (!res.ok) throw new Error('Server error')
-      const data = await res.json()
+      setTurns(previous =>
+        previous.map(turn =>
+          turn.id === turnId
+            ? {
+                ...turn,
+                session: {
+                  ...turn.session,
+                  status: 'synthesizing',
+                  initialResponses: data.initialResponses,
+                  evaluations: data.evaluation ? [data.evaluation] : [],
+                },
+              }
+            : turn
+        )
+      )
 
-      setSession(s => ({
-        ...s,
-        status: 'synthesizing',
-        initialResponses: data.initialResponses,
-        evaluations: data.evaluation ? [data.evaluation] : [],
-      }))
+      await new Promise(resolve => setTimeout(resolve, 300))
 
-      // Small delay for UX — show "synthesizing" step briefly
-      await new Promise(r => setTimeout(r, 300))
-
-      setSession(s => ({
-        ...s,
-        status: 'done',
-        synthesis: data.synthesis,
-      }))
+      setTurns(previous =>
+        previous.map(turn =>
+          turn.id === turnId
+            ? {
+                ...turn,
+                session: {
+                  ...turn.session,
+                  status: 'done',
+                  initialResponses: data.initialResponses,
+                  evaluations: data.evaluation ? [data.evaluation] : [],
+                  synthesis: data.synthesis,
+                },
+              }
+            : turn
+        )
+      )
     } catch {
-      setSession(s => ({
-        ...s,
-        status: 'error',
-        error: 'Něco se nepodařilo. Zkus to prosím znovu.',
-      }))
+      setTurns(previous =>
+        previous.map(turn =>
+          turn.id === turnId
+            ? {
+                ...turn,
+                session: {
+                  ...turn.session,
+                  status: 'error',
+                  error: 'Něco se nepodařilo. Zkus to prosím znovu.',
+                },
+              }
+            : turn
+        )
+      )
+    } finally {
+      setRunning(false)
+      clearAttachments()
     }
   }
 
-  const isRunning = ['initial_responses', 'evaluating', 'synthesizing'].includes(session.status)
-  const isDone = session.status === 'done'
-
-  const roleColors: Record<string, string> = {
-    practitioner: '#10b981',
-    skeptic: '#ef4444',
-    strategist: '#8b5cf6',
+  function clearConversation() {
+    setTurns([])
+    setInput('')
+    clearAttachments()
   }
 
   return (
-    <div className="workspace-layout">
-      <aside className="workspace-sidebar">
-        <div className="panel-card panel-card-sticky">
-          <div className="tab-header">
-            <h2>AI Council</h2>
-            <p className="sub">Nech více AI rolí odpovědět, zkritizovat se navzájem a vytvořit společný závěr.</p>
-          </div>
-
-          <div className="input-form">
-            <textarea
-              className="main-input"
-              placeholder="Popiš otázku, rozhodnutí nebo problém pro AI radu…"
-              value={prompt}
-              onChange={e => setPrompt(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && e.metaKey) runCouncil() }}
-              rows={4}
-            />
-            <button
-              className="btn-primary"
-              onClick={runCouncil}
-              disabled={!prompt.trim() || isRunning}
-            >
-              {isRunning ? 'Rada pracuje…' : 'Spustit AI Council'}
-            </button>
-          </div>
-
-          {(isDone || session.status === 'error') && (
-            <div className="sidebar-actions">
-              <button className="btn-secondary btn-secondary-block" onClick={() => setSession({ status: 'idle', initialResponses: [], evaluations: [], synthesis: null, error: null })}>
-                Nová otázka
-              </button>
-            </div>
-          )}
-
-          <AIConfigPanel
-            roles={COUNCIL_ROLES_CONFIG}
-            configs={roleConfigs}
-            onChange={setRoleConfigs}
-          />
+    <div className="tab-page">
+      <div className="thread-page-header">
+        <div>
+          <h2>AI Council</h2>
+          <p>Více rolí, jedna rada. Každý běh je nový deliberativní tah v témže prostoru.</p>
         </div>
-      </aside>
+        {turns.length > 0 && (
+          <button type="button" className="btn-secondary" onClick={clearConversation}>
+            Nový chat
+          </button>
+        )}
+      </div>
 
-      <section className="workspace-results">
-        {(isRunning || isDone || session.status === 'error') ? (
-          <div>
-          {/* Question recap */}
-          <div className="results-toolbar">
-            <span>
-              <strong>Otázka:</strong>{' '}
-              {prompt}
-            </span>
-          </div>
-
-          <StepIndicator currentStep={isDone ? 3 : currentStep} />
-
-          {isRunning && (
-            <div className="loading-state" style={{ marginBottom: 24 }}>
-              <span className="spinner" />
-              <span>{LOADING_MESSAGES[session.status] ?? 'Zpracovávám…'}</span>
+      <div className="chat-thread">
+        <div className="thread-narrow">
+          {turns.length === 0 ? (
+            <div className="empty-state empty-state-large">
+              <p>AI Council rozvine otázku do samostatných hlasů, vzájemného hodnocení a společného závěru.</p>
+              <RoleConfigStrip
+                configs={roleConfigs}
+                providers={providers}
+                onChange={(key, config) => setRoleConfigs(previous => ({ ...previous, [key]: config }))}
+              />
             </div>
-          )}
+          ) : (
+            turns.map(turn => (
+              <div key={turn.id} className="thread-turn thread-turn-stacked">
+                <div className="thread-message thread-message-user">
+                  <div className="thread-message-meta">Ty</div>
+                  <div className="prose thread-message-content thread-message-user">
+                    <p>{turn.prompt}</p>
+                  </div>
+                </div>
 
-          {session.error && <div className="error-msg">{session.error}</div>}
+                <div className="thread-message thread-message-assistant">
+                  <div className="thread-message-meta">AI Council</div>
 
-          {/* Synthesis first when done */}
-          {isDone && session.synthesis && (
-            <div style={{ marginBottom: 24 }}>
-              <SynthesisView synthesis={session.synthesis} />
-            </div>
-          )}
+                  {['initial_responses', 'evaluating', 'synthesizing'].includes(turn.session.status) && (
+                    <div className="loading-state">
+                      <span className="spinner" />
+                      <span>{LOADING_MESSAGES[turn.session.status] ?? 'Zpracovávám…'}</span>
+                    </div>
+                  )}
 
-          {/* Initial responses */}
-          {(session.initialResponses.length > 0 || isRunning) && (
-            <Collapsible title="Odpovědi rádců" defaultOpen={!isDone}>
-              <div className="council-members-grid">
-                {session.initialResponses.length > 0
-                  ? session.initialResponses.map(r => (
-                    <div key={r.roleName} className="council-member-card">
-                      <div
-                        className="council-member-header"
-                        style={{ borderTop: `3px solid ${roleColors[r.roleName] ?? '#6366f1'}` }}
-                      >
-                        <div>
-                          <span className="council-role-badge">{r.roleLabel}</span>
-                          <div className="provider-badge" style={{ marginTop: 4 }}>
-                            <span className="provider-dot" style={{ background: PROVIDER_COLORS[r.providerName] ?? '#6b7280' }} />
-                            <span style={{ color: PROVIDER_COLORS[r.providerName] ?? '#6b7280', fontWeight: 700 }}>
-                              {r.providerName === 'anthropic' ? 'Claude' :
-                               r.providerName === 'openai' ? 'OpenAI' :
-                               r.providerName === 'gemini' ? 'Gemini' :
-                               r.providerName === 'mock' ? 'Mock' : r.providerName}
-                            </span>
-                            <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>
-                              {' · '}{r.modelName === 'mock-cs-v1' ? 'Demo' : r.modelName}
+                  {turn.session.error && <div className="error-msg">{turn.session.error}</div>}
+
+                  {turn.session.initialResponses.length > 0 && (
+                    <div className="council-inline-grid">
+                      {turn.session.initialResponses.map(response => (
+                        <div key={response.roleName} className="analysis-section">
+                          <div className="provider-badge" style={{ marginBottom: 8 }}>
+                            <span className="provider-dot" style={{ background: ROLE_COLORS[response.roleName] ?? '#6b7280' }} />
+                            <span>{response.roleLabel}</span>
+                            <span className="provider-meta">
+                              {response.providerName === 'anthropic'
+                                ? 'Claude'
+                                : response.providerName === 'openai'
+                                  ? 'OpenAI'
+                                  : response.providerName === 'gemini'
+                                    ? 'Gemini'
+                                    : 'Nepřipojeno'}
                             </span>
                           </div>
+                          {response.status === 'error' ? (
+                            <div className="error-msg">Tato odpověď se nepodařila vygenerovat.</div>
+                          ) : (
+                            <div className="prose section-content" dangerouslySetInnerHTML={{ __html: renderMarkdown(response.content) }} />
+                          )}
                         </div>
-                      </div>
-                      <div className="council-member-body">
-                        {r.status === 'error'
-                          ? <div className="error-msg">Tato odpověď se nepodařila vygenerovat.</div>
-                          : <div className="prose" dangerouslySetInnerHTML={{ __html: renderMarkdown(r.content) }} />
-                        }
-                      </div>
+                      ))}
                     </div>
-                  ))
-                  : ['Praktik', 'Skeptik', 'Stratég'].map(label => (
-                    <div key={label} className="council-member-card">
-                      <div className="council-member-header">
-                        <span className="council-role-badge">{label}</span>
-                      </div>
-                      <div className="council-member-body">
-                        <div className="loading-state"><span className="spinner" /> Připravuji…</div>
-                      </div>
-                    </div>
-                  ))
-                }
-              </div>
-            </Collapsible>
-          )}
+                  )}
 
-          {/* Evaluation */}
-          {session.evaluations.length > 0 && (
-            <Collapsible title="Vzájemné hodnocení" defaultOpen={false}>
-              {session.evaluations.map((ev, i) => (
-                <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  {[
-                    { label: 'Co bylo silné', value: ev.strengths },
-                    { label: 'Co bylo slabé', value: ev.weaknesses },
-                    { label: 'Co chybí', value: ev.missing },
-                    { label: 'Nejdůležitější argument', value: ev.bestArgument },
-                  ].map(item => (
-                    <div key={item.label} className="result-section">
-                      <div className="section-label">{item.label}</div>
-                      <div className="section-content" dangerouslySetInnerHTML={{ __html: renderMarkdown(item.value) }} />
+                  {turn.session.evaluations.length > 0 && (
+                    <div className="analysis-section">
+                      <div className="section-label">Vzájemné hodnocení</div>
+                      {turn.session.evaluations.map((evaluation, index) => (
+                        <div key={index} className="analysis-flow-tight">
+                          <div className="section-content"><strong>Silné:</strong> {evaluation.strengths}</div>
+                          <div className="section-content"><strong>Slabé:</strong> {evaluation.weaknesses}</div>
+                          <div className="section-content"><strong>Chybí:</strong> {evaluation.missing}</div>
+                          <div className="section-content"><strong>Klíčový argument:</strong> {evaluation.bestArgument}</div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
+
+                  {turn.session.synthesis && <SynthesisView synthesis={turn.session.synthesis} />}
                 </div>
-              ))}
-            </Collapsible>
+              </div>
+            ))
           )}
+          <div ref={bottomRef} />
         </div>
-        ) : (
-        <div className="empty-state empty-state-large">
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
-          </svg>
-          <p>Zadej otázku nebo problém pro AI radu. Vpravo se pak rozloží odpovědi, hodnocení i závěr.</p>
+      </div>
+
+      <div className="composer-wrap">
+        <div className="composer-shell">
+          <input
+            ref={attachmentInputRef}
+            className="hidden-file-input"
+            type="file"
+            multiple
+            accept="image/*,.pdf,.doc,.docx,.txt,.md,.csv,.json"
+            onChange={onFileChange}
+          />
+          {attachments.length > 0 && (
+            <div className="attachment-row">
+              {attachments.map((attachment, index) => (
+                <button key={`${attachment.file.name}-${index}`} type="button" className="attachment-chip" onClick={() => removeAttachment(index)}>
+                  {attachment.file.name}
+                </button>
+              ))}
+            </div>
+          )}
+          {turns.length > 0 && (
+            <RoleConfigStrip
+              configs={roleConfigs}
+              providers={providers}
+              onChange={(key, config) => setRoleConfigs(previous => ({ ...previous, [key]: config }))}
+            />
+          )}
+          <div className="composer-row">
+            <button type="button" className="composer-add" aria-label="Přidat soubor" onClick={openPicker}>
+              +
+            </button>
+            <textarea
+              ref={inputRef}
+              className="composer-input"
+              placeholder="Popiš otázku, rozhodnutí nebo problém pro radu…"
+              value={input}
+              onChange={event => setInput(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  event.preventDefault()
+                  runCouncil()
+                }
+              }}
+              rows={1}
+              disabled={running}
+            />
+            <div className="composer-controls">
+              <button type="button" className="composer-submit" onClick={runCouncil} disabled={!input.trim() || running} aria-label="Odeslat">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 19V5" />
+                  <path d="m5 12 7-7 7 7" />
+                </svg>
+              </button>
+            </div>
+          </div>
         </div>
-        )}
-      </section>
+      </div>
     </div>
   )
 }

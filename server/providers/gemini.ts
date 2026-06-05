@@ -1,9 +1,9 @@
-import type { AIProvider, GenerateOptions } from './interface'
+import type { AIProvider, APIKeys, GenerateOptions } from './interface'
 
 export const GEMINI_MODELS = [
-  { id: 'gemini-2.5-pro',   label: 'Gemini 2.5 Pro'   },
-  { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash'  },
-  { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash'  },
+  { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
+  { id: 'gemini-3.1-pro',   label: 'Gemini 3.1 Pro'   },
+  { id: 'gemini-3-flash',   label: 'Gemini 3 Flash'   },
 ]
 
 const TEMPERATURES: Record<string, number> = {
@@ -13,13 +13,15 @@ const TEMPERATURES: Record<string, number> = {
 export class GeminiProvider implements AIProvider {
   name = 'gemini'
   model: string
+  private apiKey?: string
 
-  constructor(model?: string) {
-    this.model = model ?? process.env.GEMINI_MODEL ?? 'gemini-2.5-flash'
+  constructor(model?: string, keys?: APIKeys) {
+    this.model = model ?? process.env.GEMINI_MODEL ?? 'gemini-3.5-flash'
+    this.apiKey = keys?.gemini || process.env.GEMINI_API_KEY
   }
 
   async generate(options: GenerateOptions): Promise<string> {
-    const apiKey = process.env.GEMINI_API_KEY
+    const apiKey = this.apiKey
     if (!apiKey) throw new Error('GEMINI_API_KEY není nastavený.')
 
     const model = options.model ?? this.model

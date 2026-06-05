@@ -1,21 +1,44 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import WeakestAssumption from './components/tabs/WeakestAssumption'
 import ThreeAnswers from './components/tabs/ThreeAnswers'
 import ThreePerspectives from './components/tabs/ThreePerspectives'
 import Council from './components/tabs/Council'
+import SettingsPanel from './components/ui/SettingsPanel'
+import { useProviders } from './components/ui/AIConfigPanel'
+import type { APIKeys } from './types/index'
 import './index.css'
 
 type Tab = 'weakest' | 'three' | 'perspectives' | 'council'
 
 const TABS: Array<{ id: Tab; label: string; hint: string }> = [
-  { id: 'weakest',      label: 'Nejslabší předpoklad', hint: 'Kde se to může celé rozbít?' },
-  { id: 'three',        label: 'Tři odpovědi',          hint: 'Čistý paralelní chat, bez rolí.' },
-  { id: 'perspectives', label: 'Tři pohledy',           hint: 'Poradce, oponent, stratég.' },
-  { id: 'council',      label: 'AI Council',            hint: 'Více rolí, vzájemná kritika, závěr.' },
+  { id: 'three', label: 'Tři odpovědi', hint: 'Čistý paralelní chat, bez rolí.' },
+  { id: 'perspectives', label: 'Tři pohledy', hint: 'Poradce, oponent, stratég.' },
+  { id: 'council', label: 'AI Council', hint: 'Více rolí, vzájemná kritika, závěr.' },
+  { id: 'weakest', label: 'Nejslabší předpoklad', hint: 'Kde se to může celé rozbít?' },
 ]
 
+const STORAGE_KEY = 'ai-council-api-keys'
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState<Tab>('weakest')
+  const [activeTab, setActiveTab] = useState<Tab>('three')
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [apiKeys, setApiKeys] = useState<APIKeys>({ openai: '', anthropic: '', gemini: '' })
+  const providers = useProviders(apiKeys)
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem(STORAGE_KEY)
+    if (!saved) return
+    try {
+      const parsed = JSON.parse(saved) as Partial<APIKeys>
+      setApiKeys({
+        openai: parsed.openai ?? '',
+        anthropic: parsed.anthropic ?? '',
+        gemini: parsed.gemini ?? '',
+      })
+    } catch {
+      window.localStorage.removeItem(STORAGE_KEY)
+    }
+  }, [])
 
   return (
     <div className="app-shell">
@@ -39,14 +62,37 @@ export default function App() {
             </button>
           ))}
         </nav>
+
+        <button
+          type="button"
+          className="icon-button"
+          aria-label="Otevřít nastavení"
+          onClick={() => setSettingsOpen(true)}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.7 1.7 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.82-.33 1.7 1.7 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.51 1.7 1.7 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.51 1.7 1.7 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1Z" />
+          </svg>
+        </button>
       </header>
 
       <div className="app-workspace">
-        {activeTab === 'weakest'      && <WeakestAssumption />}
-        {activeTab === 'three'        && <ThreeAnswers />}
-        {activeTab === 'perspectives' && <ThreePerspectives />}
-        {activeTab === 'council'      && <Council />}
+        {activeTab === 'weakest' && <WeakestAssumption apiKeys={apiKeys} />}
+        {activeTab === 'three' && <ThreeAnswers apiKeys={apiKeys} />}
+        {activeTab === 'perspectives' && <ThreePerspectives apiKeys={apiKeys} />}
+        {activeTab === 'council' && <Council apiKeys={apiKeys} />}
       </div>
+
+      <SettingsPanel
+        open={settingsOpen}
+        apiKeys={apiKeys}
+        providers={providers}
+        onClose={() => setSettingsOpen(false)}
+        onSave={keys => {
+          setApiKeys(keys)
+          window.localStorage.setItem(STORAGE_KEY, JSON.stringify(keys))
+        }}
+      />
     </div>
   )
 }

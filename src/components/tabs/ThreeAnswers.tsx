@@ -1,13 +1,7 @@
-/**
- * Tři odpovědi — čistý paralelní chat.
- * Žádné role, žádné systémové prompty. Tři modely odpovídají stejně jako na normálním chatu.
- * Uživatel si vybere 3 libovolné modely (klidně stejné) a chatuje s nimi paralelně.
- */
-import { useState, useRef, useEffect } from 'react'
-import type { ProviderName, ThinkingLevel } from '../../types/index'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { APIKeys, ProviderName, ThinkingLevel } from '../../types/index'
 import { useProviders, type LiveProvider } from '../ui/AIConfigPanel'
-
-// ---- Types ----
+import { useComposerAttachments } from '../ui/useComposerAttachments'
 
 interface SlotConfig {
   provider: ProviderName
@@ -28,91 +22,29 @@ interface SlotState {
   loading: boolean
 }
 
-// ---- Constants ----
-
 const PROVIDER_COLORS: Record<string, string> = {
-  openai: '#10a37f', anthropic: '#d97706', gemini: '#4285f4', mock: '#6b7280',
+  openai: '#10a37f',
+  anthropic: '#d97706',
+  gemini: '#4285f4',
 }
 
 const PROVIDER_LABELS: Record<string, string> = {
-  openai: 'OpenAI', anthropic: 'Claude', gemini: 'Gemini', mock: 'Mock',
+  openai: 'OpenAI',
+  anthropic: 'Claude',
+  gemini: 'Gemini',
+}
+
+const THINKING_LABELS: Record<ThinkingLevel, string> = {
+  low: 'Rychlé',
+  medium: 'Standard',
+  high: 'Hluboké',
 }
 
 const DEFAULT_SLOTS: SlotConfig[] = [
-  { provider: 'mock', model: 'mock-cs-v1', thinkingLevel: 'medium' },
-  { provider: 'mock', model: 'mock-cs-v1', thinkingLevel: 'medium' },
-  { provider: 'mock', model: 'mock-cs-v1', thinkingLevel: 'medium' },
+  { provider: 'openai', model: 'gpt-5.5', thinkingLevel: 'medium' },
+  { provider: 'anthropic', model: 'claude-sonnet-4-6', thinkingLevel: 'medium' },
+  { provider: 'gemini', model: 'gemini-3.5-flash', thinkingLevel: 'medium' },
 ]
-
-// ---- Slot selector (provider + model + thinking) ----
-
-function SlotSelector({ config, providers, onChange, index }: {
-  config: SlotConfig
-  providers: LiveProvider[]
-  onChange: (c: SlotConfig) => void
-  index: number
-}) {
-  const pData = providers.find(p => p.provider === config.provider)
-  const models = pData?.models ?? []
-  const color = pData?.color ?? '#6b7280'
-
-  function setProvider(provider: ProviderName) {
-    const p = providers.find(p => p.provider === provider)
-    const model = p?.models[0]?.id ?? config.model
-    onChange({ ...config, provider, model })
-  }
-
-  return (
-    <div className="slot-selector">
-      <div className="slot-selector-header">
-        <span className="slot-num">Model {index + 1}</span>
-      </div>
-      {/* Provider pills */}
-      <div className="slot-provider-pills">
-        {providers.map(p => (
-          <button
-            key={p.provider}
-            className={`slot-provider-pill ${config.provider === p.provider ? 'active' : ''}`}
-            style={config.provider === p.provider ? { borderColor: p.color, color: p.color, background: p.color + '15' } : {}}
-            onClick={() => setProvider(p.provider)}
-            title={!p.hasKey && p.provider !== 'mock' ? 'API klíč není nastaven' : p.label}
-          >
-            {p.label}
-            {!p.hasKey && p.provider !== 'mock' && <span className="no-key-dot">!</span>}
-          </button>
-        ))}
-      </div>
-      {/* Model select */}
-      <select
-        className="ai-config-select"
-        value={config.model}
-        onChange={e => onChange({ ...config, model: e.target.value })}
-      >
-        {models.map(m => (
-          <option key={m.id} value={m.id}>{m.label}</option>
-        ))}
-      </select>
-      {/* Thinking level */}
-      <div className="slot-thinking">
-        {(['low', 'medium', 'high'] as ThinkingLevel[]).map(lvl => {
-          const labels = { low: 'Rychlé', medium: 'Standard', high: 'Hluboké' }
-          return (
-            <button
-              key={lvl}
-              className={`thinking-pill ${config.thinkingLevel === lvl ? 'active' : ''}`}
-              style={config.thinkingLevel === lvl ? { borderColor: color, color, background: color + '15' } : {}}
-              onClick={() => onChange({ ...config, thinkingLevel: lvl })}
-            >
-              {labels[lvl]}
-            </button>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-// ---- Single chat column ----
 
 function renderMarkdown(text: string) {
   return text
@@ -120,204 +52,384 @@ function renderMarkdown(text: string) {
     .replace(/`([^`]+)`/g, '<code>$1</code>')
     .replace(/\n\n/g, '</p><p>')
     .replace(/\n/g, '<br/>')
-    .replace(/^/, '<p>').replace(/$/, '</p>')
+    .replace(/^/, '<p>')
+    .replace(/$/, '</p>')
 }
 
-function ChatColumn({ slot }: { slot: SlotState; index: number }) {
-  const color = PROVIDER_COLORS[slot.config.provider] ?? '#6b7280'
-  const providerLabel = PROVIDER_LABELS[slot.config.provider] ?? slot.config.provider
-  const modelLabel = slot.config.model === 'mock-cs-v1' ? 'Demo' : slot.config.model
-  const bottomRef = useRef<HTMLDivElement>(null)
+function SlotSettings({
+  config,
+  providers,
+  onChange,
+}: {
+  config: SlotConfig
+  providers: LiveProvider[]
+  onChange: (config: SlotConfig) => void
+}) {
+  const [openMenu, setOpenMenu] = useState<'model' | 'thinking' | null>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const providerData = providers.find(provider => provider.provider === config.provider)
+  const models = providerData?.models ?? []
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-  }, [slot.messages.length])
+    function handleClickOutside(event: MouseEvent) {
+      if (!menuRef.current?.contains(event.target as Node)) setOpenMenu(null)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  function setProvider(provider: ProviderName) {
+    const providerInfo = providers.find(item => item.provider === provider)
+    const model = providerInfo?.models[0]?.id ?? config.model
+    onChange({ ...config, provider, model })
+  }
 
   return (
-    <div className="chat-column">
-      <div className="chat-column-header" style={{ borderTop: `3px solid ${color}` }}>
-        <div className="provider-badge">
-          <span className="provider-dot" style={{ background: color }} />
-          <span style={{ color, fontWeight: 700 }}>{providerLabel}</span>
-          <span style={{ color: 'var(--text-muted)' }}>· {modelLabel}</span>
+    <div className="stream-config-row" ref={menuRef}>
+      <div className="stream-config">
+        <button type="button" className="stream-text-trigger" onClick={() => setOpenMenu(current => current === 'model' ? null : 'model')}>
+          {config.model.replace(/^gpt-/, 'GPT-').replace('claude-', 'Claude ').replace(/-/g, ' ')}
+        </button>
+        {openMenu === 'model' && (
+        <div className="stream-config-panel">
+          <div className="stream-config-group">
+            <div className="stream-config-label">Provider</div>
+            <div className="menu-list">
+              {providers.map(provider => (
+                <button
+                  key={provider.provider}
+                  type="button"
+                  className={`menu-option ${config.provider === provider.provider ? 'selected' : ''}`}
+                  onClick={() => {
+                    setProvider(provider.provider)
+                    setOpenMenu(null)
+                  }}
+                  title={!provider.hasKey ? 'API klíč není nastaven' : provider.label}
+                >
+                  <span>{provider.label}</span>
+                  <span className={`connection-status inline ${provider.source === 'live' && provider.hasKey ? 'connected' : 'disconnected'}`}>
+                    <span className="provider-dot" />
+                  </span>
+                  {config.provider === provider.provider && <span className="menu-check">✓</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="stream-config-group">
+            <div className="stream-config-label">Model</div>
+            <div className="menu-list">
+              {models.map(model => (
+                <button
+                key={model.id}
+                type="button"
+                className={`menu-option ${config.model === model.id ? 'selected' : ''}`}
+                onClick={() => {
+                  onChange({ ...config, model: model.id })
+                  setOpenMenu(null)
+                }}
+              >
+                <span>{model.label}</span>
+                {config.model === model.id && <span className="menu-check">✓</span>}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
-      </div>
-      <div className="chat-column-body">
-        {slot.messages.length === 0 && !slot.loading && (
-          <div style={{ color: 'var(--text-muted)', fontSize: 13, textAlign: 'center', paddingTop: 24 }}>
-            Odpověď se zobrazí tady
-          </div>
         )}
-        {slot.messages.map((msg, i) => (
-          <div key={i} className={`chat-msg chat-msg-${msg.role}`}>
-            {msg.role === 'user' ? (
-              <div className="chat-msg-user">{msg.content}</div>
-            ) : msg.status === 'loading' ? (
-              <div className="loading-state" style={{ padding: '8px 0' }}>
-                <span className="spinner" />
-                <span>Přemýšlí…</span>
-              </div>
-            ) : msg.status === 'error' ? (
-              <div className="error-msg">{msg.error ?? 'Chyba při generování.'}</div>
-            ) : (
-              <div className="prose chat-msg-ai" dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }} />
-            )}
+      </div>
+
+      <div className="stream-config">
+        <button type="button" className="stream-text-trigger" onClick={() => setOpenMenu(current => current === 'thinking' ? null : 'thinking')}>
+          {THINKING_LABELS[config.thinkingLevel]}
+        </button>
+        {openMenu === 'thinking' && (
+        <div className="stream-config-panel">
+          <div className="stream-config-group">
+            <div className="stream-config-label">Uvažování</div>
+            <div className="menu-list">
+              {(['low', 'medium', 'high'] as ThinkingLevel[]).map(level => (
+                <button
+                key={level}
+                type="button"
+                className={`menu-option ${config.thinkingLevel === level ? 'selected' : ''}`}
+                onClick={() => {
+                  onChange({ ...config, thinkingLevel: level })
+                  setOpenMenu(null)
+                }}
+              >
+                <span>{THINKING_LABELS[level]}</span>
+                {config.thinkingLevel === level && <span className="menu-check">✓</span>}
+                </button>
+              ))}
+            </div>
           </div>
-        ))}
-        <div ref={bottomRef} />
+        </div>
+        )}
       </div>
     </div>
   )
 }
 
-// ---- Main component ----
+function ChatColumn({
+  slot,
+  providers,
+  onConfigChange,
+  index,
+}: {
+  slot: SlotState
+  providers: LiveProvider[]
+  onConfigChange: (config: SlotConfig) => void
+  index: number
+}) {
+  const color = PROVIDER_COLORS[slot.config.provider] ?? '#6b7280'
+  const providerLabel = PROVIDER_LABELS[slot.config.provider] ?? slot.config.provider
+  const modelLabel = slot.config.model
+  const providerData = providers.find(provider => provider.provider === slot.config.provider)
+  const connected = providerData?.source === 'live' && providerData.hasKey
+  const columnRef = useRef<HTMLDivElement>(null)
 
-export default function ThreeAnswers() {
-  const providers = useProviders()
+  useEffect(() => {
+    columnRef.current?.scrollTo({ top: columnRef.current.scrollHeight, behavior: 'smooth' })
+  }, [slot.messages.length])
 
+  return (
+    <section className="parallel-column">
+      <header className="parallel-column-header">
+        <div>
+          <div className="column-kicker">Model {index + 1}</div>
+          <div className="provider-badge">
+            <span className="provider-dot" style={{ background: color }} />
+            <span style={{ color, fontWeight: 600 }}>{providerLabel}</span>
+            <span className="provider-meta">{modelLabel}</span>
+            {connected && <span className="connection-status connected"><span className="provider-dot" /> online</span>}
+          </div>
+        </div>
+        <SlotSettings config={slot.config} providers={providers} onChange={onConfigChange} />
+      </header>
+
+      <div className="parallel-column-body" ref={columnRef}>
+        {slot.messages.length === 0 && !slot.loading && (
+          <div className="column-empty">
+            Tady poběží čistý dialog s tímto modelem.
+          </div>
+        )}
+
+        {slot.messages.map((message, messageIndex) => (
+          <div key={messageIndex} className={`thread-message thread-message-${message.role}`}>
+            <div className="thread-message-meta">{message.role === 'user' ? 'Ty' : providerLabel}</div>
+
+            {message.role === 'assistant' && message.status === 'loading' ? (
+              <div className="loading-state">
+                <span className="spinner" />
+                <span>Přemýšlí…</span>
+              </div>
+            ) : message.role === 'assistant' && message.status === 'error' ? (
+              <div className="error-msg">{message.error ?? 'Nepodařilo se vygenerovat odpověď.'}</div>
+            ) : (
+              <div
+                className={`prose thread-message-content ${message.role === 'user' ? 'thread-message-user' : ''}`}
+                dangerouslySetInnerHTML={{ __html: renderMarkdown(message.content) }}
+              />
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+export default function ThreeAnswers({ apiKeys }: { apiKeys: APIKeys }) {
+  const providers = useProviders(apiKeys)
   const [slots, setSlots] = useState<SlotState[]>(() =>
     DEFAULT_SLOTS.map(config => ({ config, messages: [], loading: false }))
   )
   const [input, setInput] = useState('')
-  const [hasConversation, setHasConversation] = useState(false)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const {
+    attachments,
+    inputRef: attachmentInputRef,
+    openPicker,
+    onFileChange,
+    removeAttachment,
+    clearAttachments,
+    appendAttachmentContext,
+  } = useComposerAttachments()
 
-  // Sync provider defaults once providers are loaded
   useEffect(() => {
     if (!providers.length) return
-    setSlots(prev => prev.map(slot => {
-      const p = providers.find(p => p.provider === slot.config.provider)
-      if (!p) return slot
-      const modelExists = p.models.some(m => m.id === slot.config.model)
-      if (modelExists) return slot
-      return { ...slot, config: { ...slot.config, model: p.models[0]?.id ?? slot.config.model } }
-    }))
-  }, [providers.length])
+    setSlots(previous =>
+      previous.map(slot => {
+        const provider = providers.find(item => item.provider === slot.config.provider)
+        if (!provider) return slot
+        const modelExists = provider.models.some(model => model.id === slot.config.model)
+        if (modelExists) return slot
+        return { ...slot, config: { ...slot.config, model: provider.models[0]?.id ?? slot.config.model } }
+      })
+    )
+  }, [providers])
 
-  function updateSlotConfig(i: number, config: SlotConfig) {
-    setSlots(prev => prev.map((s, idx) => idx === i ? { ...s, config } : s))
+  useEffect(() => {
+    const textarea = inputRef.current
+    if (!textarea) return
+    textarea.style.height = '0px'
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 220)}px`
+  }, [input])
+
+  function updateSlotConfig(index: number, config: SlotConfig) {
+    setSlots(previous => previous.map((slot, slotIndex) => (slotIndex === index ? { ...slot, config } : slot)))
   }
 
   async function sendMessage() {
     const prompt = input.trim()
     if (!prompt) return
+    const promptWithAttachments = appendAttachmentContext(prompt)
+
     setInput('')
-    setHasConversation(true)
+    setSlots(previous =>
+      previous.map(slot => ({
+        ...slot,
+        loading: true,
+        messages: [
+          ...slot.messages,
+          { role: 'user', content: prompt, status: 'done' },
+          { role: 'assistant', content: '', status: 'loading' },
+        ],
+      }))
+    )
 
-    // Optimistically add user message + loading placeholder to each slot
-    setSlots(prev => prev.map(slot => ({
-      ...slot,
-      loading: true,
-      messages: [
-        ...slot.messages,
-        { role: 'user', content: prompt },
-        { role: 'assistant', content: '', status: 'loading' },
-      ],
-    })))
-
-    // Fire all 3 requests in parallel, each independent
     await Promise.allSettled(
-      slots.map(async (slot, i) => {
+      slots.map(async (slot, index) => {
         const history = slot.messages
-          .filter(m => m.status !== 'loading')
-          .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }))
+          .filter(message => message.status !== 'loading')
+          .map(message => ({ role: message.role as 'user' | 'assistant', content: message.content }))
 
         try {
-          const res = await fetch('/api/pure-chat', {
+          const response = await fetch('/api/pure-chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              messages: [...history, { role: 'user', content: prompt }],
+              messages: [...history, { role: 'user', content: promptWithAttachments }],
               modelConfig: slot.config,
+              apiKeys,
             }),
           })
 
-          if (!res.ok) throw new Error(`HTTP ${res.status}`)
-          const data: { content: string } = await res.json()
+          if (!response.ok) throw new Error(`HTTP ${response.status}`)
+          const data: { content: string } = await response.json()
 
-          setSlots(prev => prev.map((s, idx) => {
-            if (idx !== i) return s
-            const msgs = [...s.messages]
-            msgs[msgs.length - 1] = { role: 'assistant', content: data.content, status: 'done' }
-            return { ...s, loading: false, messages: msgs }
-          }))
-        } catch (err) {
-          setSlots(prev => prev.map((s, idx) => {
-            if (idx !== i) return s
-            const msgs = [...s.messages]
-            msgs[msgs.length - 1] = { role: 'assistant', content: '', status: 'error', error: 'Nepodařilo se vygenerovat odpověď.' }
-            return { ...s, loading: false, messages: msgs }
-          }))
+          setSlots(previous =>
+            previous.map((currentSlot, slotIndex) => {
+              if (slotIndex !== index) return currentSlot
+              const nextMessages = [...currentSlot.messages]
+              nextMessages[nextMessages.length - 1] = { role: 'assistant', content: data.content, status: 'done' }
+              return { ...currentSlot, loading: false, messages: nextMessages }
+            })
+          )
+        } catch {
+          setSlots(previous =>
+            previous.map((currentSlot, slotIndex) => {
+              if (slotIndex !== index) return currentSlot
+              const nextMessages = [...currentSlot.messages]
+              nextMessages[nextMessages.length - 1] = {
+                role: 'assistant',
+                content: '',
+                status: 'error',
+                error: 'Nepodařilo se vygenerovat odpověď.',
+              }
+              return { ...currentSlot, loading: false, messages: nextMessages }
+            })
+          )
         }
       })
     )
+    clearAttachments()
   }
 
   function clearAll() {
-    setSlots(prev => prev.map(s => ({ ...s, messages: [], loading: false })))
-    setHasConversation(false)
+    setSlots(previous => previous.map(slot => ({ ...slot, messages: [], loading: false })))
     setInput('')
+    clearAttachments()
   }
 
-  const anyLoading = slots.some(s => s.loading)
+  const anyLoading = slots.some(slot => slot.loading)
+  const hasConversation = useMemo(() => slots.some(slot => slot.messages.length > 0), [slots])
 
   return (
-    <div className="workspace-layout">
-      {/* ── Left sidebar ── */}
-      <aside className="workspace-sidebar">
-        <div className="panel-card panel-card-sticky">
-          <div className="tab-header">
-            <h2>Tři odpovědi</h2>
-            <p className="sub">Čistý paralelní chat. Žádné role, žádné instrukce. Tři modely vedle sebe.</p>
-          </div>
+    <div className="tab-page">
+      <div className="parallel-page-header">
+        <div>
+          <h2>Tři odpovědi</h2>
+          <p>Jeden prompt, tři paralelní dialogy. Bez rolí a bez zbytečných panelů.</p>
+        </div>
+        {hasConversation && (
+          <button type="button" className="btn-secondary" onClick={clearAll}>
+            Nový chat
+          </button>
+        )}
+      </div>
 
-          {/* Input */}
-          <div className="input-form">
+      <div className="parallel-grid">
+        {slots.map((slot, index) => (
+          <ChatColumn
+            key={index}
+            index={index}
+            slot={slot}
+            providers={providers}
+            onConfigChange={config => updateSlotConfig(index, config)}
+          />
+        ))}
+      </div>
+
+      <div className="composer-wrap">
+        <div className="composer-shell">
+          <input
+            ref={attachmentInputRef}
+            className="hidden-file-input"
+            type="file"
+            multiple
+            accept="image/*,.pdf,.doc,.docx,.txt,.md,.csv,.json"
+            onChange={onFileChange}
+          />
+          {attachments.length > 0 && (
+            <div className="attachment-row">
+              {attachments.map((attachment, index) => (
+                <button key={`${attachment.file.name}-${index}`} type="button" className="attachment-chip" onClick={() => removeAttachment(index)}>
+                  {attachment.file.name}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="composer-row">
+            <button type="button" className="composer-add" aria-label="Přidat soubor" onClick={openPicker}>
+              +
+            </button>
             <textarea
-              className="main-input"
-              placeholder="Napiš cokoliv…"
+              ref={inputRef}
+              className="composer-input"
+              placeholder="Napiš zprávu pro všechny tři modely…"
               value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && e.metaKey) sendMessage() }}
-              rows={4}
+              onChange={event => setInput(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  event.preventDefault()
+                  if (!anyLoading) sendMessage()
+                }
+              }}
+              rows={1}
               disabled={anyLoading}
             />
-            <button className="btn-primary" onClick={sendMessage} disabled={anyLoading || !input.trim()}>
-              {anyLoading ? <><span className="spinner" /> Generuji…</> : hasConversation ? 'Pokračovat' : 'Odeslat'}
-            </button>
-          </div>
-
-          {hasConversation && (
-            <button className="btn-secondary btn-secondary-block" onClick={clearAll}>
-              Nový chat
-            </button>
-          )}
-
-          {/* Model selectors */}
-          <div className="ai-config-panel">
-            <div className="sidebar-actions-title" style={{ padding: '10px 0 8px' }}>Výběr modelů</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {slots.map((slot, i) => (
-                <SlotSelector
-                  key={i}
-                  index={i}
-                  config={slot.config}
-                  providers={providers}
-                  onChange={cfg => updateSlotConfig(i, cfg)}
-                />
-              ))}
+            <div className="composer-controls">
+              <button type="button" className="composer-submit" onClick={sendMessage} disabled={anyLoading || !input.trim()} aria-label="Odeslat">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 19V5" />
+                  <path d="m5 12 7-7 7 7" />
+                </svg>
+              </button>
             </div>
           </div>
         </div>
-      </aside>
-
-      {/* ── Right: 3 chat columns ── */}
-      <section className="workspace-results" style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        <div className="chat-columns-grid">
-          {slots.map((slot, i) => (
-            <ChatColumn key={i} slot={slot} index={i} />
-          ))}
-        </div>
-      </section>
+      </div>
     </div>
   )
 }

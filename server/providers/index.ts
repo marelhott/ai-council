@@ -1,10 +1,10 @@
-import type { AIProvider } from './interface'
+import type { AIProvider, APIKeys } from './interface'
 import { MockProvider } from './mock'
 import { AnthropicProvider, ANTHROPIC_MODELS } from './anthropic'
 import { OpenAIProvider, OPENAI_MODELS } from './openai'
 import { GeminiProvider, GEMINI_MODELS } from './gemini'
 
-export type ProviderName = 'openai' | 'anthropic' | 'gemini' | 'mock'
+export type ProviderName = 'openai' | 'anthropic' | 'gemini'
 
 export interface RoleConfig {
   provider: ProviderName
@@ -12,37 +12,41 @@ export interface RoleConfig {
   thinkingLevel: 'low' | 'medium' | 'high'
 }
 
+function hasKey(value?: string) {
+  return !!value?.trim()
+}
+
 /** Default provider (global fallback, no config) */
-export function createProvider(): AIProvider {
-  if (process.env.OPENAI_API_KEY)    return new OpenAIProvider()
-  if (process.env.ANTHROPIC_API_KEY) return new AnthropicProvider()
-  if (process.env.GEMINI_API_KEY)    return new GeminiProvider()
+export function createProvider(apiKeys?: APIKeys): AIProvider {
+  if (hasKey(apiKeys?.openai) || process.env.OPENAI_API_KEY) return new OpenAIProvider(undefined, apiKeys)
+  if (hasKey(apiKeys?.anthropic) || process.env.ANTHROPIC_API_KEY) return new AnthropicProvider(undefined, apiKeys)
+  if (hasKey(apiKeys?.gemini) || process.env.GEMINI_API_KEY) return new GeminiProvider(undefined, apiKeys)
   return new MockProvider()
 }
 
 /** Provider for a specific role config */
-export function createProviderFor(config: RoleConfig): AIProvider {
+export function createProviderFor(config: RoleConfig, apiKeys?: APIKeys): AIProvider {
   switch (config.provider) {
     case 'openai':
-      if (!process.env.OPENAI_API_KEY) {
+      if (!hasKey(apiKeys?.openai) && !process.env.OPENAI_API_KEY) {
         console.warn('[provider] OPENAI_API_KEY chybí — používám mock')
         return new MockProvider()
       }
-      return new OpenAIProvider(config.model)
+      return new OpenAIProvider(config.model, apiKeys)
 
     case 'anthropic':
-      if (!process.env.ANTHROPIC_API_KEY) {
+      if (!hasKey(apiKeys?.anthropic) && !process.env.ANTHROPIC_API_KEY) {
         console.warn('[provider] ANTHROPIC_API_KEY chybí — používám mock')
         return new MockProvider()
       }
-      return new AnthropicProvider(config.model)
+      return new AnthropicProvider(config.model, apiKeys)
 
     case 'gemini':
-      if (!process.env.GEMINI_API_KEY) {
+      if (!hasKey(apiKeys?.gemini) && !process.env.GEMINI_API_KEY) {
         console.warn('[provider] GEMINI_API_KEY chybí — používám mock')
         return new MockProvider()
       }
-      return new GeminiProvider(config.model)
+      return new GeminiProvider(config.model, apiKeys)
 
     default:
       return new MockProvider()
@@ -71,13 +75,6 @@ export const AVAILABLE_PROVIDERS = [
     color: '#4285f4',
     models: GEMINI_MODELS,
     requiresKey: 'GEMINI_API_KEY',
-  },
-  {
-    id: 'mock' as ProviderName,
-    label: 'Mock',
-    color: '#6b7280',
-    models: [{ id: 'mock-cs-v1', label: 'Mock CS v1' }],
-    requiresKey: null,
   },
 ]
 

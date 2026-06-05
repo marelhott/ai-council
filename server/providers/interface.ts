@@ -5,6 +5,12 @@ export interface Message {
 
 export type ThinkingLevel = 'low' | 'medium' | 'high'
 
+export interface APIKeys {
+  openai?: string
+  anthropic?: string
+  gemini?: string
+}
+
 export interface GenerateOptions {
   messages: Message[]
   maxTokens?: number

@@ -1,12 +1,10 @@
-import type { AIProvider, GenerateOptions } from './interface'
+import type { AIProvider, APIKeys, GenerateOptions } from './interface'
 
 // Fallback statický seznam — /api/models vrací živý aktuální seznam
 export const OPENAI_MODELS = [
-  { id: 'o3',           label: 'o3',             reasoning: true  },
-  { id: 'o4-mini',      label: 'o4-mini',        reasoning: true  },
-  { id: 'gpt-4.1',      label: 'GPT-4.1',        reasoning: false },
-  { id: 'gpt-4.1-mini', label: 'GPT-4.1 Mini',   reasoning: false },
-  { id: 'gpt-4o',       label: 'GPT-4o',         reasoning: false },
+  { id: 'gpt-5.5',      label: 'GPT-5.5',        reasoning: true  },
+  { id: 'gpt-5.4',      label: 'GPT-5.4',        reasoning: true  },
+  { id: 'gpt-5.4-mini', label: 'GPT-5.4 Mini',   reasoning: true  },
 ]
 
 const REASONING_EFFORT: Record<string, string> = {
@@ -20,13 +18,15 @@ const TEMPERATURES: Record<string, number> = {
 export class OpenAIProvider implements AIProvider {
   name = 'openai'
   model: string
+  private apiKey?: string
 
-  constructor(model?: string) {
-    this.model = model ?? process.env.OPENAI_MODEL ?? 'gpt-4.1-mini'
+  constructor(model?: string, keys?: APIKeys) {
+    this.model = model ?? process.env.OPENAI_MODEL ?? 'gpt-5.4'
+    this.apiKey = keys?.openai || process.env.OPENAI_API_KEY
   }
 
   async generate(options: GenerateOptions): Promise<string> {
-    const apiKey = process.env.OPENAI_API_KEY
+    const apiKey = this.apiKey
     if (!apiKey) throw new Error('OPENAI_API_KEY není nastavený.')
 
     const model = options.model ?? this.model

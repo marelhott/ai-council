@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
-import type { AIProvider, GenerateOptions } from './interface'
+import type { AIProvider, APIKeys, GenerateOptions } from './interface'
 
 const THINKING_BUDGETS: Record<string, number> = {
   low:    0,      // no extended thinking
@@ -8,9 +8,9 @@ const THINKING_BUDGETS: Record<string, number> = {
 }
 
 export const ANTHROPIC_MODELS = [
-  { id: 'claude-opus-4-5',    label: 'Claude Opus 4.5' },
-  { id: 'claude-sonnet-4-5',  label: 'Claude Sonnet 4.5' },
-  { id: 'claude-haiku-3-5',   label: 'Claude Haiku 3.5' },
+  { id: 'claude-opus-4-6',    label: 'Claude Opus 4.6' },
+  { id: 'claude-sonnet-4-6',  label: 'Claude Sonnet 4.6' },
+  { id: 'claude-haiku-4-5',   label: 'Claude Haiku 4.5' },
 ]
 
 export class AnthropicProvider implements AIProvider {
@@ -18,9 +18,10 @@ export class AnthropicProvider implements AIProvider {
   model: string
   private client: Anthropic
 
-  constructor(model?: string) {
-    this.model = model ?? process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-5'
-    this.client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  constructor(model?: string, keys?: APIKeys) {
+    const apiKey = keys?.anthropic || process.env.ANTHROPIC_API_KEY
+    this.model = model ?? process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6'
+    this.client = new Anthropic({ apiKey })
   }
 
   async generate(options: GenerateOptions): Promise<string> {

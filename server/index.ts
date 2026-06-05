@@ -3,12 +3,17 @@ import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { createProvider, createProviderFor, AVAILABLE_PROVIDERS, type RoleConfig } from './providers/index'
 import { fetchLiveModels } from './liveModels'
+import type { APIKeys } from './providers/interface'
 
 const app = express()
 app.use(express.json())
-
-const defaultProvider = createProvider()
 const distPath = path.resolve(process.cwd(), 'dist')
+
+function readApiKeys(body: unknown): APIKeys | undefined {
+  const value = body as { apiKeys?: APIKeys } | undefined
+  if (!value?.apiKeys) return undefined
+  return value.apiKeys
+}
 
 // ---- Providers & live models ----
 
@@ -21,9 +26,9 @@ app.get('/api/providers', (_req, res) => {
 })
 
 // Live models — queries each provider's models API, cached 24h
-app.get('/api/models', async (_req, res) => {
+app.post('/api/models', async (req, res) => {
   try {
-    const models = await fetchLiveModels()
+    const models = await fetchLiveModels(readApiKeys(req.body))
     res.json(models)
   } catch (err) {
     console.error('models error:', err)
@@ -32,6 +37,7 @@ app.get('/api/models', async (_req, res) => {
 })
 
 app.get('/api/health', (_req, res) => {
+  const defaultProvider = createProvider()
   res.json({ ok: true, provider: defaultProvider.name, model: defaultProvider.model })
 })
 
@@ -45,7 +51,7 @@ app.post('/api/pure-chat', async (req, res) => {
   if (!messages?.length) return res.status(400).json({ error: 'Chybí messages' })
 
   try {
-    const p = createProviderFor(modelConfig)
+    const p = createProviderFor(modelConfig, readApiKeys(req.body))
     const content = await p.generate({
       messages: messages.map(m => ({ role: m.role, content: m.content })),
       maxTokens: 1500,
@@ -85,6 +91,7 @@ app.post('/api/weakest-assumption', async (req, res) => {
   if (!prompt?.trim()) return res.status(400).json({ error: 'Chybí prompt' })
 
   try {
+    const defaultProvider = createProvider(readApiKeys(req.body))
     const userContent = refineAction
       ? `Původní nápad: ${prompt}\n\nUživatel chce: ${refineAction}. Uprav odpověď podle tohoto požadavku.`
       : prompt
@@ -123,6 +130,7 @@ app.post('/api/three-answers', async (req, res) => {
     prompt: string
     history?: Array<{ role: 'user' | 'assistant'; content: string; persona: string }>
     roleConfigs?: Record<string, RoleConfig>
+    apiKeys?: APIKeys
   }
   if (!prompt?.trim()) return res.status(400).json({ error: 'Chybí prompt' })
 
@@ -132,7 +140,7 @@ app.post('/api/three-answers', async (req, res) => {
   const results = await Promise.allSettled(
     roles.map(async role => {
       const cfg = roleConfigs?.[role]
-      const p = cfg ? createProviderFor(cfg) : defaultProvider
+      const p = cfg ? createProviderFor(cfg, readApiKeys(req.body)) : createProvider(readApiKeys(req.body))
       const thinkingLevel = cfg?.thinkingLevel
 
       const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
@@ -158,7 +166,7 @@ app.post('/api/three-answers', async (req, res) => {
       return { roleName: role, roleLabel: roleLabels[role], providerName: r.value.providerName, modelName: r.value.modelName, content: r.value.content, status: 'done', error: null }
     }
     const cfg = roleConfigs?.[role]
-    const fallbackProvider = cfg ? createProviderFor(cfg) : defaultProvider
+    const fallbackProvider = cfg ? createProviderFor(cfg, readApiKeys(req.body)) : createProvider(readApiKeys(req.body))
     return { roleName: role, roleLabel: roleLabels[role], providerName: fallbackProvider.name, modelName: cfg?.model ?? fallbackProvider.model, content: '', status: 'error', error: 'Tato odpověď se nepodařila vygenerovat.' }
   })
 
@@ -211,11 +219,13 @@ app.post('/api/council', async (req, res) => {
   if (!prompt?.trim()) return res.status(400).json({ error: 'Chybí prompt' })
 
   try {
+    const apiKeys = readApiKeys(req.body)
+    const defaultProvider = createProvider(apiKeys)
     const councilRoles = Object.entries(COUNCIL_ROLES) as Array<[string, { label: string; system: string }]>
     const initialResults = await Promise.allSettled(
       councilRoles.map(([key, config]) => {
         const cfg = roleConfigs?.[key]
-        const p = cfg ? createProviderFor(cfg) : defaultProvider
+        const p = cfg ? createProviderFor(cfg, apiKeys) : defaultProvider
         return p.generate({
           messages: [{ role: 'system', content: config.system }, { role: 'user', content: prompt }],
           maxTokens: 700,
@@ -227,7 +237,7 @@ app.post('/api/council', async (req, res) => {
     const initialResponses = initialResults.map((r, i) => {
       const [key, config] = councilRoles[i]
       const cfg = roleConfigs?.[key]
-      const fallback = cfg ? createProviderFor(cfg) : defaultProvider
+      const fallback = cfg ? createProviderFor(cfg, apiKeys) : defaultProvider
       return {
         roleName: key,
         roleLabel: config.label,

@@ -1,8 +1,14 @@
 export type Mode = 'weakest_assumption' | 'three_answers' | 'council'
 export type ResponseStatus = 'pending' | 'done' | 'error'
 export type Verdict = 'pokračovat' | 'upravit' | 'nejdřív ověřit' | 'zastavit'
-export type ProviderName = 'openai' | 'anthropic' | 'gemini' | 'mock'
+export type ProviderName = 'openai' | 'anthropic' | 'gemini'
 export type ThinkingLevel = 'low' | 'medium' | 'high'
+
+export interface APIKeys {
+  openai: string
+  anthropic: string
+  gemini: string
+}
 
 export interface ModelOption { id: string; label: string }
 export interface ProviderOption {

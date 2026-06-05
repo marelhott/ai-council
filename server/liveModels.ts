@@ -7,13 +7,13 @@
 export interface ModelInfo {
   id: string
   label: string
-  provider: 'openai' | 'anthropic' | 'gemini' | 'mock'
+  provider: 'openai' | 'anthropic' | 'gemini'
   isReasoning?: boolean
   contextWindow?: number
 }
 
 export interface ProviderModels {
-  provider: 'openai' | 'anthropic' | 'gemini' | 'mock'
+  provider: 'openai' | 'anthropic' | 'gemini'
   label: string
   color: string
   hasKey: boolean
@@ -22,41 +22,38 @@ export interface ProviderModels {
   source: 'live' | 'fallback'
 }
 
+export interface APIKeys {
+  openai?: string
+  anthropic?: string
+  gemini?: string
+}
+
 // ---- Curated fallbacks — nejnovější modely vždy první ----
 // Aktualizováno: červen 2025
 
 const FALLBACK_OPENAI: ModelInfo[] = [
-  // Reasoning modely (nejnovější nahoře)
-  { id: 'o3',            label: 'o3',             provider: 'openai', isReasoning: true  },
-  { id: 'o4-mini',       label: 'o4-mini',        provider: 'openai', isReasoning: true  },
-  // Standardní modely
-  { id: 'gpt-4.1',       label: 'GPT-4.1',        provider: 'openai', isReasoning: false },
-  { id: 'gpt-4.1-mini',  label: 'GPT-4.1 Mini',   provider: 'openai', isReasoning: false },
-  { id: 'gpt-4o',        label: 'GPT-4o',          provider: 'openai', isReasoning: false },
+  { id: 'gpt-5.5',      label: 'GPT-5.5',      provider: 'openai', isReasoning: true },
+  { id: 'gpt-5.4',      label: 'GPT-5.4',      provider: 'openai', isReasoning: true },
+  { id: 'gpt-5.4-mini', label: 'GPT-5.4 Mini', provider: 'openai', isReasoning: true },
 ]
 
 const FALLBACK_ANTHROPIC: ModelInfo[] = [
-  // Seřazeno: nejnovější/nejvýkonnější první (live fetch vrátí skutečný aktuální seznam)
-  { id: 'claude-opus-4-5',   label: 'Claude Opus 4.5',   provider: 'anthropic' },
-  { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5', provider: 'anthropic' },
-  { id: 'claude-haiku-3-5',  label: 'Claude Haiku 3.5',  provider: 'anthropic' },
+  { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', provider: 'anthropic' },
+  { id: 'claude-opus-4-6',   label: 'Claude Opus 4.6',   provider: 'anthropic' },
+  { id: 'claude-haiku-4-5',  label: 'Claude Haiku 4.5',  provider: 'anthropic' },
 ]
 
 const FALLBACK_GEMINI: ModelInfo[] = [
-  // Seřazeno: nejnovější/nejvýkonnější první
-  { id: 'gemini-2.5-pro',        label: 'Gemini 2.5 Pro',        provider: 'gemini' },
-  { id: 'gemini-2.5-flash',      label: 'Gemini 2.5 Flash',      provider: 'gemini' },
-  { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite', provider: 'gemini' },
-]
-
-const MOCK_MODELS: ModelInfo[] = [
-  { id: 'mock-cs-v1', label: 'Mock (demo)', provider: 'mock' },
+  { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash', provider: 'gemini' },
+  { id: 'gemini-3.1-pro',   label: 'Gemini 3.1 Pro',   provider: 'gemini' },
+  { id: 'gemini-3-flash',   label: 'Gemini 3 Flash',   provider: 'gemini' },
 ]
 
 // ---- Model ID → friendly label heuristics ----
 
 function openAILabel(id: string): string {
   const map: Record<string, string> = {
+    'gpt-5.5': 'GPT-5.5', 'gpt-5.4': 'GPT-5.4', 'gpt-5.4-mini': 'GPT-5.4 Mini', 'gpt-5.4-nano': 'GPT-5.4 Nano',
     'gpt-4.1': 'GPT-4.1', 'gpt-4.1-mini': 'GPT-4.1 Mini', 'gpt-4.1-nano': 'GPT-4.1 Nano',
     'gpt-4o': 'GPT-4o', 'gpt-4o-mini': 'GPT-4o Mini',
     'o1': 'o1', 'o1-mini': 'o1 Mini', 'o1-pro': 'o1 Pro',
@@ -84,8 +81,8 @@ function geminiLabel(id: string): string {
 // Regex pro detekci reasoning modelů (o-série + budoucí)
 const REASONING_PATTERN = /^o\d/
 
-async function fetchOpenAIModels(): Promise<ModelInfo[]> {
-  const key = process.env.OPENAI_API_KEY
+async function fetchOpenAIModels(keys?: APIKeys): Promise<ModelInfo[]> {
+  const key = keys?.openai || process.env.OPENAI_API_KEY
   if (!key) return FALLBACK_OPENAI
 
   const r = await fetch('https://api.openai.com/v1/models', {
@@ -97,7 +94,7 @@ async function fetchOpenAIModels(): Promise<ModelInfo[]> {
   const data = await r.json() as { data: Array<{ id: string; created?: number }> }
 
   // Zahrň: gpt-4+, o-serie, gpt-5+ (budoucí)
-  const keep = /^(gpt-[45]|o\d|chatgpt-4)/
+  const keep = /^(gpt-5|gpt-[45]|o\d|chatgpt-4)/
 
   // Vylučuj: starší/specifické varianty
   const exclude = /audio|realtime|vision|turbo|instruct|dalle|tts|whisper|babbage|davinci|2023-|2022-/
@@ -127,9 +124,9 @@ async function fetchOpenAIModels(): Promise<ModelInfo[]> {
   return result.length >= 2 ? result : FALLBACK_OPENAI
 }
 
-async function fetchAnthropicModels(): Promise<ModelInfo[]> {
+async function fetchAnthropicModels(keys?: APIKeys): Promise<ModelInfo[]> {
   // Anthropic has a models list endpoint since v1
-  const key = process.env.ANTHROPIC_API_KEY
+  const key = keys?.anthropic || process.env.ANTHROPIC_API_KEY
   if (!key) return FALLBACK_ANTHROPIC
 
   try {
@@ -154,8 +151,8 @@ async function fetchAnthropicModels(): Promise<ModelInfo[]> {
   }
 }
 
-async function fetchGeminiModels(): Promise<ModelInfo[]> {
-  const key = process.env.GEMINI_API_KEY
+async function fetchGeminiModels(keys?: APIKeys): Promise<ModelInfo[]> {
+  const key = keys?.gemini || process.env.GEMINI_API_KEY
   if (!key) return FALLBACK_GEMINI
 
   try {
@@ -193,24 +190,31 @@ interface CacheEntry {
 let cache: CacheEntry | null = null
 const CACHE_TTL = 24 * 60 * 60 * 1000 // 24h
 
-export async function fetchLiveModels(): Promise<ProviderModels[]> {
-  if (cache && Date.now() < cache.expiresAt) return cache.data
+function cacheKey(keys?: APIKeys) {
+  return JSON.stringify({
+    openai: !!keys?.openai,
+    anthropic: !!keys?.anthropic,
+    gemini: !!keys?.gemini,
+  })
+}
+
+export async function fetchLiveModels(keys?: APIKeys): Promise<ProviderModels[]> {
+  if (cache && Date.now() < cache.expiresAt && (cache as CacheEntry & { key?: string }).key === cacheKey(keys)) return cache.data
 
   const [openai, anthropic, gemini] = await Promise.all([
-    fetchOpenAIModels().catch(() => FALLBACK_OPENAI),
-    fetchAnthropicModels().catch(() => FALLBACK_ANTHROPIC),
-    fetchGeminiModels().catch(() => FALLBACK_GEMINI),
+    fetchOpenAIModels(keys).catch(() => FALLBACK_OPENAI),
+    fetchAnthropicModels(keys).catch(() => FALLBACK_ANTHROPIC),
+    fetchGeminiModels(keys).catch(() => FALLBACK_GEMINI),
   ])
 
   const now = new Date().toISOString()
 
   const result: ProviderModels[] = [
-    { provider: 'openai',    label: 'OpenAI',  color: '#10a37f', hasKey: !!process.env.OPENAI_API_KEY,    models: openai,    fetchedAt: now, source: process.env.OPENAI_API_KEY    ? 'live' : 'fallback' },
-    { provider: 'anthropic', label: 'Claude',  color: '#d97706', hasKey: !!process.env.ANTHROPIC_API_KEY, models: anthropic, fetchedAt: now, source: process.env.ANTHROPIC_API_KEY ? 'live' : 'fallback' },
-    { provider: 'gemini',    label: 'Gemini',  color: '#4285f4', hasKey: !!process.env.GEMINI_API_KEY,    models: gemini,    fetchedAt: now, source: process.env.GEMINI_API_KEY    ? 'live' : 'fallback' },
-    { provider: 'mock',      label: 'Mock',    color: '#6b7280', hasKey: true,                            models: MOCK_MODELS, fetchedAt: now, source: 'fallback' },
+    { provider: 'openai',    label: 'OpenAI',  color: '#10a37f', hasKey: !!(keys?.openai || process.env.OPENAI_API_KEY),       models: openai,    fetchedAt: now, source: openai === FALLBACK_OPENAI ? 'fallback' : 'live' },
+    { provider: 'anthropic', label: 'Claude',  color: '#d97706', hasKey: !!(keys?.anthropic || process.env.ANTHROPIC_API_KEY), models: anthropic, fetchedAt: now, source: anthropic === FALLBACK_ANTHROPIC ? 'fallback' : 'live' },
+    { provider: 'gemini',    label: 'Gemini',  color: '#4285f4', hasKey: !!(keys?.gemini || process.env.GEMINI_API_KEY),       models: gemini,    fetchedAt: now, source: gemini === FALLBACK_GEMINI ? 'fallback' : 'live' },
   ]
 
-  cache = { data: result, expiresAt: Date.now() + CACHE_TTL }
+  cache = { data: result, expiresAt: Date.now() + CACHE_TTL, key: cacheKey(keys) } as CacheEntry & { key: string }
   return result
 }

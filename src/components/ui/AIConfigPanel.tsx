@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import type { RoleConfig, ProviderName, ThinkingLevel } from '../../types/index'
+import type { APIKeys, RoleConfig, ProviderName, ThinkingLevel } from '../../types/index'
 
 export interface LiveModel { id: string; label: string; isReasoning?: boolean }
 export interface LiveProvider {
@@ -12,10 +12,9 @@ export interface LiveProvider {
 }
 
 const DEFAULT_MODELS: Record<ProviderName, string> = {
-  openai:    'gpt-4.1',
-  anthropic: 'claude-sonnet-4-5',
-  gemini:    'gemini-2.5-flash',
-  mock:      'mock-cs-v1',
+  openai: 'gpt-5.5',
+  anthropic: 'claude-sonnet-4-6',
+  gemini: 'gemini-3.5-flash',
 }
 
 const THINKING_LABELS: Record<ThinkingLevel, string> = { low: 'Rychlé', medium: 'Standard', high: 'Hluboké' }
@@ -28,35 +27,35 @@ const THINKING_TIPS: Record<ThinkingLevel, string> = {
 interface Role { key: string; label: string }
 
 interface Props {
+  apiKeys: APIKeys
   roles: Role[]
   configs: Record<string, RoleConfig>
   onChange: (configs: Record<string, RoleConfig>) => void
   defaultOpen?: boolean
 }
 
-// Shared cache so all instances benefit from one fetch
-let providersCache: LiveProvider[] | null = null
-let cachePromise: Promise<LiveProvider[]> | null = null
-
-async function loadProviders(): Promise<LiveProvider[]> {
-  if (providersCache) return providersCache
-  if (cachePromise) return cachePromise
-  cachePromise = fetch('/api/models')
-    .then(r => r.json())
-    .then(d => { providersCache = d; return d as LiveProvider[] })
+async function loadProviders(apiKeys: APIKeys): Promise<LiveProvider[]> {
+  return fetch('/api/models', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ apiKeys }),
+  })
+    .then(response => response.json())
+    .then(data => data as LiveProvider[])
     .catch(() => [] as LiveProvider[])
-  return cachePromise
 }
 
-export function useProviders() {
-  const [providers, setProviders] = useState<LiveProvider[]>(providersCache ?? [])
-  useEffect(() => { loadProviders().then(setProviders) }, [])
+export function useProviders(apiKeys: APIKeys) {
+  const [providers, setProviders] = useState<LiveProvider[]>([])
+  useEffect(() => {
+    loadProviders(apiKeys).then(setProviders)
+  }, [apiKeys.openai, apiKeys.anthropic, apiKeys.gemini])
   return providers
 }
 
-export default function AIConfigPanel({ roles, configs, onChange, defaultOpen = false }: Props) {
+export default function AIConfigPanel({ apiKeys, roles, configs, onChange, defaultOpen = false }: Props) {
   const [open, setOpen] = useState(defaultOpen)
-  const providers = useProviders()
+  const providers = useProviders(apiKeys)
 
   function updateConfig(roleKey: string, patch: Partial<RoleConfig>) {
     const current = configs[roleKey]
@@ -103,13 +102,13 @@ export default function AIConfigPanel({ roles, configs, onChange, defaultOpen = 
                       {providers.map(p => (
                         <button
                           key={p.provider}
-                          className={`provider-pill ${cfg.provider === p.provider ? 'active' : ''} ${!p.hasKey && p.provider !== 'mock' ? 'no-key' : ''}`}
+                          className={`provider-pill ${cfg.provider === p.provider ? 'active' : ''} ${!p.hasKey ? 'no-key' : ''}`}
                           style={cfg.provider === p.provider ? { borderColor: p.color, color: p.color, background: p.color + '18' } : {}}
                           onClick={() => updateConfig(role.key, { provider: p.provider })}
-                          title={!p.hasKey && p.provider !== 'mock' ? `API klíč není nastaven` : `${p.label} (${p.source})`}
+                          title={!p.hasKey ? 'API klíč není nastaven' : `${p.label} (${p.source})`}
                         >
                           {p.label}
-                          {!p.hasKey && p.provider !== 'mock' && <span className="no-key-dot">!</span>}
+                          {!p.hasKey && <span className="no-key-dot">!</span>}
                         </button>
                       ))}
                     </div>

@@ -114,15 +114,22 @@ export class GeminiProvider implements AIProvider {
 
     let emittedText = ''
     for await (const message of parseSSE(response)) {
-      const payload = JSON.parse(message.data) as {
-        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
-      }
-      const text = payload.candidates?.[0]?.content?.parts?.map(part => part.text ?? '').join('') ?? ''
-      if (!text || !text.startsWith(emittedText)) continue
-      const delta = text.slice(emittedText.length)
-      if (delta) {
-        emittedText = text
-        yield delta
+      const payloads = message.data
+        .split('\n')
+        .map(part => part.trim())
+        .filter(Boolean)
+
+      for (const rawPayload of payloads) {
+        const payload = JSON.parse(rawPayload) as {
+          candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
+        }
+        const text = payload.candidates?.[0]?.content?.parts?.map(part => part.text ?? '').join('') ?? ''
+        if (!text || !text.startsWith(emittedText)) continue
+        const delta = text.slice(emittedText.length)
+        if (delta) {
+          emittedText = text
+          yield delta
+        }
       }
     }
   }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import type { APIKeys, CouncilSession, CouncilSynthesis, RoleConfig, ThinkingLevel } from '../../types/index'
-import { useProviders, type LiveProvider } from '../ui/AIConfigPanel'
+import type { APIKeys, CouncilSession, CouncilSynthesis, RoleConfig } from '../../types/index'
+import { useProviders } from '../ui/AIConfigPanel'
+import ModelPicker from '../ui/ModelPicker'
 import { useComposerAttachments } from '../ui/useComposerAttachments'
 
 const COUNCIL_ROLES_CONFIG = [
@@ -15,22 +16,20 @@ const ROLE_COLORS: Record<string, string> = {
   strategist: '#8b5cf6',
 }
 
-const THINKING_LABELS: Record<ThinkingLevel, string> = {
-  low: 'Rychlé',
-  medium: 'Standard',
-  high: 'Hluboké',
+const DEFAULT_COUNCIL_CONFIGS: Record<string, RoleConfig> = {
+  practitioner: { provider: 'openai', model: 'gpt-5.5', thinkingLevel: 'low' },
+  skeptic: { provider: 'anthropic', model: 'claude-sonnet-4-6', thinkingLevel: 'low' },
+  strategist: { provider: 'gemini', model: 'gemini-3.5-flash', thinkingLevel: 'low' },
 }
 
-const DEFAULT_COUNCIL_CONFIGS: Record<string, RoleConfig> = {
-  practitioner: { provider: 'openai', model: 'gpt-5.5', thinkingLevel: 'medium' },
-  skeptic: { provider: 'anthropic', model: 'claude-sonnet-4-6', thinkingLevel: 'medium' },
-  strategist: { provider: 'gemini', model: 'gemini-3.5-flash', thinkingLevel: 'medium' },
+const DEFAULT_WRAPUP_CONFIGS: Record<string, RoleConfig> = {
+  evaluator: { provider: 'anthropic', model: 'claude-sonnet-4-6', thinkingLevel: 'low' },
+  synthesis: { provider: 'openai', model: 'gpt-5.5', thinkingLevel: 'low' },
 }
 
 const LOADING_MESSAGES: Record<string, string> = {
-  initial_responses: 'Rada přemýšlí…',
-  evaluating: 'Rádci si navzájem hodnotí odpovědi…',
-  synthesizing: 'Předseda rady připravuje závěr…',
+  initial_responses: 'Rada odpovídá…',
+  synthesizing: 'Vzniká společný závěr…',
 }
 
 interface CouncilTurn {
@@ -52,118 +51,11 @@ function verdictClass(verdict: string) {
   return verdict === 'nejdřív ověřit' ? 'nejdřív-ověřit' : verdict
 }
 
-function RoleSettings({
-  config,
-  providers,
-  onChange,
-}: {
-  config: RoleConfig
-  providers: LiveProvider[]
-  onChange: (config: RoleConfig) => void
-}) {
-  const [openMenu, setOpenMenu] = useState<'model' | 'thinking' | null>(null)
-  const menuRef = useRef<HTMLDivElement>(null)
-  const providerData = providers.find(provider => provider.provider === config.provider)
-  const models = providerData?.models ?? []
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (!menuRef.current?.contains(event.target as Node)) setOpenMenu(null)
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
-
-  function setProvider(providerName: RoleConfig['provider']) {
-    const provider = providers.find(item => item.provider === providerName)
-    const model = provider?.models[0]?.id ?? config.model
-    onChange({ ...config, provider: providerName, model })
-  }
-
-  return (
-    <div className="stream-config-row" ref={menuRef}>
-      <div className="stream-config">
-        <button type="button" className="stream-text-trigger" onClick={() => setOpenMenu(current => current === 'model' ? null : 'model')}>
-          {config.model.replace(/^gpt-/, 'GPT-').replace('claude-', 'Claude ').replace(/-/g, ' ')}
-        </button>
-        {openMenu === 'model' && (
-        <div className="stream-config-panel">
-          <div className="stream-config-group">
-            <div className="stream-config-label">Provider</div>
-            <div className="menu-list">
-              {providers.map(provider => (
-                <button
-                  key={provider.provider}
-                  type="button"
-                  className={`menu-option ${config.provider === provider.provider ? 'selected' : ''}`}
-                  onClick={() => {
-                    setProvider(provider.provider)
-                    setOpenMenu(null)
-                  }}
-                >
-                  <span>{provider.label}</span>
-                  <span className={`connection-status inline ${provider.source === 'live' && provider.hasKey ? 'connected' : 'disconnected'}`}>
-                    <span className="provider-dot" />
-                  </span>
-                  {config.provider === provider.provider && <span className="menu-check">✓</span>}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="stream-config-group">
-            <div className="stream-config-label">Model</div>
-            <div className="menu-list">
-              {models.map(model => (
-                <button
-                key={model.id}
-                type="button"
-                className={`menu-option ${config.model === model.id ? 'selected' : ''}`}
-                onClick={() => {
-                  onChange({ ...config, model: model.id })
-                  setOpenMenu(null)
-                }}
-              >
-                  <span>{model.label}</span>
-                  {config.model === model.id && <span className="menu-check">✓</span>}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-        )}
-      </div>
-
-      <div className="stream-config">
-        <button type="button" className="stream-text-trigger" onClick={() => setOpenMenu(current => current === 'thinking' ? null : 'thinking')}>
-          {THINKING_LABELS[config.thinkingLevel]}
-        </button>
-        {openMenu === 'thinking' && (
-        <div className="stream-config-panel">
-          <div className="stream-config-group">
-            <div className="stream-config-label">Uvažování</div>
-            <div className="menu-list">
-              {(['low', 'medium', 'high'] as ThinkingLevel[]).map(level => (
-                <button
-                key={level}
-                type="button"
-                className={`menu-option ${config.thinkingLevel === level ? 'selected' : ''}`}
-                onClick={() => {
-                  onChange({ ...config, thinkingLevel: level })
-                  setOpenMenu(null)
-                }}
-              >
-                  <span>{THINKING_LABELS[level]}</span>
-                  {config.thinkingLevel === level && <span className="menu-check">✓</span>}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-        )}
-      </div>
-    </div>
-  )
+function providerLabel(providerName: string) {
+  if (providerName === 'anthropic' || providerName === 'claude') return 'Claude'
+  if (providerName === 'openai') return 'OpenAI'
+  if (providerName === 'gemini') return 'Gemini'
+  return providerName
 }
 
 function SynthesisView({ synthesis }: { synthesis: CouncilSynthesis }) {
@@ -225,7 +117,7 @@ function RoleConfigStrip({
   onChange,
 }: {
   configs: Record<string, RoleConfig>
-  providers: LiveProvider[]
+  providers: ReturnType<typeof useProviders>
   onChange: (key: string, config: RoleConfig) => void
 }) {
   return (
@@ -236,7 +128,7 @@ function RoleConfigStrip({
             <span className="provider-dot" style={{ background: ROLE_COLORS[role.key] ?? '#6b7280' }} />
             <span>{role.label}</span>
           </div>
-          <RoleSettings
+          <ModelPicker
             config={configs[role.key]}
             providers={providers}
             onChange={config => onChange(role.key, config)}
@@ -247,10 +139,40 @@ function RoleConfigStrip({
   )
 }
 
+function WrapupConfigStrip({
+  configs,
+  providers,
+  onChange,
+}: {
+  configs: Record<string, RoleConfig>
+  providers: ReturnType<typeof useProviders>
+  onChange: (key: string, config: RoleConfig) => void
+}) {
+  return (
+    <div className="single-config-strip">
+      <div className="inline-role-config">
+        <div className="provider-badge">
+          <span className="provider-dot" style={{ background: '#6b7280' }} />
+          <span>Vyhodnocení</span>
+        </div>
+        <ModelPicker config={configs.evaluator} providers={providers} onChange={config => onChange('evaluator', config)} />
+      </div>
+      <div className="inline-role-config">
+        <div className="provider-badge">
+          <span className="provider-dot" style={{ background: '#111827' }} />
+          <span>Závěr</span>
+        </div>
+        <ModelPicker config={configs.synthesis} providers={providers} onChange={config => onChange('synthesis', config)} />
+      </div>
+    </div>
+  )
+}
+
 export default function Council({ apiKeys }: { apiKeys: APIKeys }) {
   const providers = useProviders(apiKeys)
   const [input, setInput] = useState('')
   const [roleConfigs, setRoleConfigs] = useState<Record<string, RoleConfig>>(DEFAULT_COUNCIL_CONFIGS)
+  const [wrapupConfigs, setWrapupConfigs] = useState<Record<string, RoleConfig>>(DEFAULT_WRAPUP_CONFIGS)
   const [turns, setTurns] = useState<CouncilTurn[]>([])
   const [running, setRunning] = useState(false)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -275,6 +197,18 @@ export default function Council({ apiKeys }: { apiKeys: APIKeys }) {
         if (!provider) continue
         if (!provider.models.some(model => model.id === current.model)) {
           next[role.key] = { ...current, model: provider.models[0]?.id ?? current.model }
+        }
+      }
+      return next
+    })
+    setWrapupConfigs(previous => {
+      const next = { ...previous }
+      for (const key of Object.keys(next)) {
+        const current = next[key]
+        const provider = providers.find(item => item.provider === current.provider)
+        if (!provider) continue
+        if (!provider.models.some(model => model.id === current.model)) {
+          next[key] = { ...current, model: provider.models[0]?.id ?? current.model }
         }
       }
       return next
@@ -310,37 +244,27 @@ export default function Council({ apiKeys }: { apiKeys: APIKeys }) {
     setTurns(previous => [...previous, { id: turnId, prompt, session: baseSession }])
 
     try {
-      setTurns(previous =>
-        previous.map(turn =>
-          turn.id === turnId ? { ...turn, session: { ...turn.session, status: 'evaluating' } } : turn
-        )
-      )
-
       const response = await fetch('/api/council', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: promptWithAttachments, roleConfigs, apiKeys }),
+        body: JSON.stringify({
+          prompt: promptWithAttachments,
+          roleConfigs,
+          evaluationConfig: wrapupConfigs.evaluator,
+          synthesisConfig: wrapupConfigs.synthesis,
+          apiKeys,
+        }),
       })
-      if (!response.ok) throw new Error('Server error')
-      const data = await response.json()
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null) as { error?: string } | null
+        throw new Error(payload?.error ?? 'Něco se nepodařilo. Zkus to prosím znovu.')
+      }
 
-      setTurns(previous =>
-        previous.map(turn =>
-          turn.id === turnId
-            ? {
-                ...turn,
-                session: {
-                  ...turn.session,
-                  status: 'synthesizing',
-                  initialResponses: data.initialResponses,
-                  evaluations: data.evaluation ? [data.evaluation] : [],
-                },
-              }
-            : turn
-        )
-      )
-
-      await new Promise(resolve => setTimeout(resolve, 300))
+      const data = await response.json() as {
+        initialResponses: CouncilSession['initialResponses']
+        evaluation?: CouncilSession['evaluations'][number]
+        synthesis: CouncilSynthesis
+      }
 
       setTurns(previous =>
         previous.map(turn =>
@@ -358,7 +282,7 @@ export default function Council({ apiKeys }: { apiKeys: APIKeys }) {
             : turn
         )
       )
-    } catch {
+    } catch (error) {
       setTurns(previous =>
         previous.map(turn =>
           turn.id === turnId
@@ -367,7 +291,7 @@ export default function Council({ apiKeys }: { apiKeys: APIKeys }) {
                 session: {
                   ...turn.session,
                   status: 'error',
-                  error: 'Něco se nepodařilo. Zkus to prosím znovu.',
+                  error: error instanceof Error ? error.message : 'Něco se nepodařilo. Zkus to prosím znovu.',
                 },
               }
             : turn
@@ -403,11 +327,16 @@ export default function Council({ apiKeys }: { apiKeys: APIKeys }) {
         <div className="thread-narrow">
           {turns.length === 0 ? (
             <div className="empty-state empty-state-large">
-              <p>AI Council rozvine otázku do samostatných hlasů, vzájemného hodnocení a společného závěru.</p>
+              <p>AI Council rozvine otázku do samostatných hlasů, rychlého vyhodnocení a společného závěru.</p>
               <RoleConfigStrip
                 configs={roleConfigs}
                 providers={providers}
                 onChange={(key, config) => setRoleConfigs(previous => ({ ...previous, [key]: config }))}
+              />
+              <WrapupConfigStrip
+                configs={wrapupConfigs}
+                providers={providers}
+                onChange={(key, config) => setWrapupConfigs(previous => ({ ...previous, [key]: config }))}
               />
             </div>
           ) : (
@@ -423,7 +352,7 @@ export default function Council({ apiKeys }: { apiKeys: APIKeys }) {
                 <div className="thread-message thread-message-assistant">
                   <div className="thread-message-meta">AI Council</div>
 
-                  {['initial_responses', 'evaluating', 'synthesizing'].includes(turn.session.status) && (
+                  {['initial_responses', 'synthesizing'].includes(turn.session.status) && (
                     <div className="loading-state">
                       <span className="spinner" />
                       <span>{LOADING_MESSAGES[turn.session.status] ?? 'Zpracovávám…'}</span>
@@ -439,18 +368,10 @@ export default function Council({ apiKeys }: { apiKeys: APIKeys }) {
                           <div className="provider-badge" style={{ marginBottom: 8 }}>
                             <span className="provider-dot" style={{ background: ROLE_COLORS[response.roleName] ?? '#6b7280' }} />
                             <span>{response.roleLabel}</span>
-                            <span className="provider-meta">
-                              {response.providerName === 'anthropic'
-                                ? 'Claude'
-                                : response.providerName === 'openai'
-                                  ? 'OpenAI'
-                                  : response.providerName === 'gemini'
-                                    ? 'Gemini'
-                                    : 'Nepřipojeno'}
-                            </span>
+                            <span className="provider-meta">{providerLabel(response.providerName)}</span>
                           </div>
                           {response.status === 'error' ? (
-                            <div className="error-msg">Tato odpověď se nepodařila vygenerovat.</div>
+                            <div className="error-msg">{response.error ?? 'Tato odpověď se nepodařila vygenerovat.'}</div>
                           ) : (
                             <div className="prose section-content" dangerouslySetInnerHTML={{ __html: renderMarkdown(response.content) }} />
                           )}
@@ -461,7 +382,7 @@ export default function Council({ apiKeys }: { apiKeys: APIKeys }) {
 
                   {turn.session.evaluations.length > 0 && (
                     <div className="analysis-section">
-                      <div className="section-label">Vzájemné hodnocení</div>
+                      <div className="section-label">Vyhodnocení debaty</div>
                       {turn.session.evaluations.map((evaluation, index) => (
                         <div key={index} className="analysis-flow-tight">
                           <div className="section-content"><strong>Silné:</strong> {evaluation.strengths}</div>
@@ -502,11 +423,18 @@ export default function Council({ apiKeys }: { apiKeys: APIKeys }) {
             </div>
           )}
           {turns.length > 0 && (
-            <RoleConfigStrip
-              configs={roleConfigs}
-              providers={providers}
-              onChange={(key, config) => setRoleConfigs(previous => ({ ...previous, [key]: config }))}
-            />
+            <>
+              <RoleConfigStrip
+                configs={roleConfigs}
+                providers={providers}
+                onChange={(key, config) => setRoleConfigs(previous => ({ ...previous, [key]: config }))}
+              />
+              <WrapupConfigStrip
+                configs={wrapupConfigs}
+                providers={providers}
+                onChange={(key, config) => setWrapupConfigs(previous => ({ ...previous, [key]: config }))}
+              />
+            </>
           )}
           <div className="composer-row">
             <button type="button" className="composer-add" aria-label="Přidat soubor" onClick={openPicker}>

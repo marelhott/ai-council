@@ -740,6 +740,14 @@ a {
   gap: 10px;
 }
 
+.single-config-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  align-items: center;
+  justify-content: center;
+}
+
 .inline-role-config {
   display: inline-flex;
   align-items: center;

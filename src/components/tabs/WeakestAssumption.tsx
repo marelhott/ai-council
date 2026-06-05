@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import type { APIKeys, WeakestAssumptionResult } from '../../types/index'
+import type { APIKeys, RoleConfig, WeakestAssumptionResult } from '../../types/index'
+import { useProviders } from '../ui/AIConfigPanel'
+import ModelPicker from '../ui/ModelPicker'
 import { useComposerAttachments } from '../ui/useComposerAttachments'
 
 const EXAMPLES = [
@@ -23,6 +25,12 @@ interface AnalysisTurn {
   result: WeakestAssumptionResult | null
   error: string | null
   loading: boolean
+}
+
+const DEFAULT_ANALYSIS_CONFIG: RoleConfig = {
+  provider: 'anthropic',
+  model: 'claude-sonnet-4-6',
+  thinkingLevel: 'low',
 }
 
 function verdictClass(verdict: string) {
@@ -99,9 +107,11 @@ function AnalysisView({ result, onRefine, loading }: {
 }
 
 export default function WeakestAssumption({ apiKeys }: { apiKeys: APIKeys }) {
+  const providers = useProviders(apiKeys)
   const [input, setInput] = useState('')
   const [turns, setTurns] = useState<AnalysisTurn[]>([])
   const [loading, setLoading] = useState(false)
+  const [analysisConfig, setAnalysisConfig] = useState<RoleConfig>(DEFAULT_ANALYSIS_CONFIG)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const {
@@ -125,6 +135,15 @@ export default function WeakestAssumption({ apiKeys }: { apiKeys: APIKeys }) {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
   }, [turns.length])
 
+  useEffect(() => {
+    if (!providers.length) return
+    const provider = providers.find(item => item.provider === analysisConfig.provider)
+    if (!provider) return
+    if (!provider.models.some(model => model.id === analysisConfig.model)) {
+      setAnalysisConfig(previous => ({ ...previous, model: provider.models[0]?.id ?? previous.model }))
+    }
+  }, [providers, analysisConfig.provider, analysisConfig.model])
+
   async function submit(refineAction?: string, promptOverride?: string) {
     const prompt = (promptOverride ?? input).trim()
     if (!prompt) return
@@ -139,18 +158,21 @@ export default function WeakestAssumption({ apiKeys }: { apiKeys: APIKeys }) {
       const response = await fetch('/api/weakest-assumption', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: promptWithAttachments, refineAction, apiKeys }),
+        body: JSON.stringify({ prompt: promptWithAttachments, refineAction, modelConfig: analysisConfig, apiKeys }),
       })
-      if (!response.ok) throw new Error()
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null) as { error?: string } | null
+        throw new Error(payload?.error ?? 'Něco se nepodařilo. Zkus to prosím znovu.')
+      }
       const data: WeakestAssumptionResult = await response.json()
       setTurns(previous =>
         previous.map(turn => (turn.id === turnId ? { ...turn, result: data, error: null, loading: false } : turn))
       )
-    } catch {
+    } catch (error) {
       setTurns(previous =>
         previous.map(turn =>
           turn.id === turnId
-            ? { ...turn, result: null, error: 'Něco se nepodařilo. Zkus to prosím znovu.', loading: false }
+            ? { ...turn, result: null, error: error instanceof Error ? error.message : 'Něco se nepodařilo. Zkus to prosím znovu.', loading: false }
             : turn
         )
       )
@@ -168,6 +190,15 @@ export default function WeakestAssumption({ apiKeys }: { apiKeys: APIKeys }) {
         <div>
           <h2>Nejslabší předpoklad</h2>
           <p>Jedna otázka dovnitř, jedna tvrdá analýza ven. Bez panelů, přímo v proudu konverzace.</p>
+        </div>
+        <div className="single-config-strip">
+          <div className="inline-role-config">
+            <div className="provider-badge">
+              <span className="provider-dot" style={{ background: '#d97706' }} />
+              <span>Analytik</span>
+            </div>
+            <ModelPicker config={analysisConfig} providers={providers} onChange={setAnalysisConfig} />
+          </div>
         </div>
       </div>
 

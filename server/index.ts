@@ -100,21 +100,22 @@ Vrať odpověď POUZE jako validní JSON objekt (bez markdown kódového bloku) 
 }`
 
 app.post('/api/weakest-assumption', async (req, res) => {
-  const { prompt, refineAction } = req.body as { prompt: string; refineAction?: string }
+  const { prompt, refineAction, modelConfig } = req.body as { prompt: string; refineAction?: string; modelConfig?: RoleConfig }
   if (!prompt?.trim()) return res.status(400).json({ error: 'Chybí prompt' })
 
   try {
-    const defaultProvider = createProvider(readApiKeys(req.body))
+    const provider = modelConfig ? createProviderFor(modelConfig, readApiKeys(req.body)) : createProvider(readApiKeys(req.body))
     const userContent = refineAction
       ? `Původní nápad: ${prompt}\n\nUživatel chce: ${refineAction}. Uprav odpověď podle tohoto požadavku.`
       : prompt
 
-    const raw = await defaultProvider.generate({
+    const raw = await provider.generate({
       messages: [
         { role: 'system', content: WEAKEST_SYSTEM },
         { role: 'user', content: userContent },
       ],
-      maxTokens: 1200,
+      maxTokens: 800,
+      thinkingLevel: modelConfig?.thinkingLevel,
     })
 
     // Parse JSON from response
@@ -168,7 +169,7 @@ app.post('/api/three-answers', async (req, res) => {
       }
       if (history?.length) messages.push({ role: 'user', content: prompt })
 
-      const content = await p.generate({ messages, maxTokens: 800, thinkingLevel })
+      const content = await p.generate({ messages, maxTokens: 520, thinkingLevel })
       return { role, providerName: p.name, modelName: cfg?.model ?? p.model, content }
     })
   )
@@ -210,45 +211,49 @@ const COUNCIL_ROLES = {
   },
 }
 
-const EVALUATION_SYSTEM = `Jsi hodnotitel v AI radě. Dostaneš původní otázku a odpovědi tří rádců. Zhodnoť jejich odpovědi.
+const COUNCIL_WRAPUP_SYSTEM = `Jsi hodnotitel a předseda AI rady v jednom. Dostaneš otázku uživatele a odpovědi tří rádců.
+
+Nejprve je stručně vyhodnoť a potom z nich udělej společný závěr.
 
 Vrať POUZE validní JSON (bez markdown bloku):
 {
-  "strengths": "Co bylo na odpovědích silné a správné.",
-  "weaknesses": "Co bylo slabé nebo příliš obecné.",
-  "missing": "Co důležitého v celé debatě chybí.",
-  "bestArgument": "Nejdůležitější argument nebo poznatek z celé diskuse."
-}`
-
-const SYNTHESIS_SYSTEM = `Jsi Předseda AI rady. Tvůj úkol je syntetizovat — ne přidávat další názor. Dostaneš otázku uživatele a výstupy tří rádců + hodnocení.
-
-Vrať POUZE validní JSON (bez markdown bloku):
-{
-  "summary": "Stručné shrnutí v 2-3 větách.",
-  "consensus": ["bod1", "bod2", "bod3"],
-  "disagreements": ["bod1", "bod2"],
-  "strongestArgument": "Nejsilnější argument z celé debaty.",
-  "biggestRisk": "Největší riziko identifikované radou.",
-  "missingInfo": "Informace, které by mohly změnit závěr.",
-  "nextStep": "Jedna konkrétní akce.",
-  "verdict": "pokračovat" | "upravit" | "nejdřív ověřit" | "zastavit"
+  "evaluation": {
+    "strengths": "Co bylo na odpovědích silné a správné.",
+    "weaknesses": "Co bylo slabé nebo příliš obecné.",
+    "missing": "Co důležitého v celé debatě chybí.",
+    "bestArgument": "Nejdůležitější argument nebo poznatek z celé diskuse."
+  },
+  "synthesis": {
+    "summary": "Stručné shrnutí v 2-3 větách.",
+    "consensus": ["bod1", "bod2", "bod3"],
+    "disagreements": ["bod1", "bod2"],
+    "strongestArgument": "Nejsilnější argument z celé debaty.",
+    "biggestRisk": "Největší riziko identifikované radou.",
+    "missingInfo": "Informace, které by mohly změnit závěr.",
+    "nextStep": "Jedna konkrétní akce.",
+    "verdict": "pokračovat" | "upravit" | "nejdřív ověřit" | "zastavit"
+  }
 }`
 
 app.post('/api/council', async (req, res) => {
-  const { prompt, roleConfigs } = req.body as { prompt: string; roleConfigs?: Record<string, RoleConfig> }
+  const { prompt, roleConfigs, evaluationConfig, synthesisConfig } = req.body as {
+    prompt: string
+    roleConfigs?: Record<string, RoleConfig>
+    evaluationConfig?: RoleConfig
+    synthesisConfig?: RoleConfig
+  }
   if (!prompt?.trim()) return res.status(400).json({ error: 'Chybí prompt' })
 
   try {
     const apiKeys = readApiKeys(req.body)
-    const defaultProvider = createProvider(apiKeys)
     const councilRoles = Object.entries(COUNCIL_ROLES) as Array<[string, { label: string; system: string }]>
     const initialResults = await Promise.allSettled(
       councilRoles.map(([key, config]) => {
         const cfg = roleConfigs?.[key]
-        const p = cfg ? createProviderFor(cfg, apiKeys) : defaultProvider
+        const p = cfg ? createProviderFor(cfg, apiKeys) : createProvider(apiKeys)
         return p.generate({
           messages: [{ role: 'system', content: config.system }, { role: 'user', content: prompt }],
-          maxTokens: 700,
+          maxTokens: 420,
           thinkingLevel: cfg?.thinkingLevel,
         }).then(content => ({ key, label: config.label, content, providerName: p.name, modelName: cfg?.model ?? p.model }))
       })
@@ -257,57 +262,46 @@ app.post('/api/council', async (req, res) => {
     const initialResponses = initialResults.map((r, i) => {
       const [key, config] = councilRoles[i]
       const cfg = roleConfigs?.[key]
-      const fallback = cfg ? createProviderFor(cfg, apiKeys) : defaultProvider
       return {
         roleName: key,
         roleLabel: config.label,
-        providerName: r.status === 'fulfilled' ? r.value.providerName : (cfg?.provider ?? fallback.name),
-        modelName: r.status === 'fulfilled' ? r.value.modelName : (cfg?.model ?? fallback.model),
+        providerName: r.status === 'fulfilled' ? r.value.providerName : (cfg?.provider ?? 'unknown'),
+        modelName: r.status === 'fulfilled' ? r.value.modelName : (cfg?.model ?? ''),
         content: r.status === 'fulfilled' ? r.value.content : '',
         status: r.status === 'fulfilled' ? 'done' : 'error',
         error: r.status === 'fulfilled' ? null : errorMessage(r.reason),
       }
     })
 
-    // Step 2: Evaluation
     const responseSummary = initialResponses
-      .map(r => `**${r.roleLabel}:** ${r.content}`)
+      .map(r => `**${r.roleLabel}:** ${r.status === 'error' ? `(chyba) ${r.error}` : r.content}`)
       .join('\n\n')
 
-    const evalRaw = await defaultProvider.generate({
+    const wrapupProvider = synthesisConfig
+      ? createProviderFor(synthesisConfig, apiKeys)
+      : evaluationConfig
+        ? createProviderFor(evaluationConfig, apiKeys)
+        : createProvider(apiKeys)
+
+    const wrapupRaw = await wrapupProvider.generate({
       messages: [
-        { role: 'system', content: EVALUATION_SYSTEM },
+        { role: 'system', content: COUNCIL_WRAPUP_SYSTEM },
         { role: 'user', content: `Otázka: ${prompt}\n\n${responseSummary}` },
       ],
-      maxTokens: 600,
+      maxTokens: 520,
+      thinkingLevel: synthesisConfig?.thinkingLevel ?? evaluationConfig?.thinkingLevel,
     })
 
     let evaluation = { strengths: '', weaknesses: '', missing: '', bestArgument: '' }
-    try {
-      const evalJson = evalRaw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
-      evaluation = JSON.parse(evalJson)
-    } catch {
-      console.warn('Nepodařilo se parseovat evaluation JSON, použiju fallback texty.')
-    }
-
-    // Step 3: Synthesis
-    const synthInput = `Otázka: ${prompt}\n\n${responseSummary}\n\nHodnocení debaty:\nSilné: ${evaluation.strengths}\nSlabé: ${evaluation.weaknesses}\nChybí: ${evaluation.missing}\nNejlepší argument: ${evaluation.bestArgument}`
-
-    const synthRaw = await defaultProvider.generate({
-      messages: [
-        { role: 'system', content: SYNTHESIS_SYSTEM },
-        { role: 'user', content: synthInput },
-      ],
-      maxTokens: 900,
-    })
-
     let synthesis = null
     try {
-      const synthJson = synthRaw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
-      synthesis = JSON.parse(synthJson)
+      const wrapupJson = wrapupRaw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+      const parsed = JSON.parse(wrapupJson)
+      evaluation = parsed.evaluation ?? evaluation
+      synthesis = parsed.synthesis ?? null
     } catch {
       synthesis = {
-        summary: synthRaw,
+        summary: wrapupRaw,
         consensus: [],
         disagreements: [],
         strongestArgument: '',
@@ -321,7 +315,7 @@ app.post('/api/council', async (req, res) => {
     res.json({ initialResponses, evaluation, synthesis })
   } catch (err) {
     console.error('council error:', err)
-    res.status(500).json({ error: 'Generování se nezdařilo' })
+    res.status(errorStatus(err)).json({ error: errorMessage(err) })
   }
 })
 

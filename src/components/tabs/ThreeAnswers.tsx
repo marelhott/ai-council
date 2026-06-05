@@ -41,9 +41,9 @@ const THINKING_LABELS: Record<ThinkingLevel, string> = {
 }
 
 const DEFAULT_SLOTS: SlotConfig[] = [
-  { provider: 'openai', model: 'gpt-5.5', thinkingLevel: 'medium' },
-  { provider: 'anthropic', model: 'claude-sonnet-4-6', thinkingLevel: 'medium' },
-  { provider: 'gemini', model: 'gemini-3.5-flash', thinkingLevel: 'medium' },
+  { provider: 'openai', model: 'gpt-5.5', thinkingLevel: 'low' },
+  { provider: 'anthropic', model: 'claude-sonnet-4-6', thinkingLevel: 'low' },
+  { provider: 'gemini', model: 'gemini-3.5-flash', thinkingLevel: 'low' },
 ]
 
 function renderMarkdown(text: string) {

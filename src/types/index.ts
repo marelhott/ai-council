@@ -78,6 +78,7 @@ export interface CouncilMemberResponse {
   modelName: string
   content: string
   status: ResponseStatus
+  error?: string | null
 }
 
 export interface CouncilEvaluation {
@@ -112,6 +113,7 @@ export interface CouncilSession {
 export interface WeakestAssumptionPayload {
   prompt: string
   refineAction?: string
+  modelConfig?: RoleConfig
 }
 
 export interface ThreeAnswersPayload {
@@ -121,4 +123,7 @@ export interface ThreeAnswersPayload {
 
 export interface CouncilPayload {
   prompt: string
+  roleConfigs?: Record<string, RoleConfig>
+  evaluationConfig?: RoleConfig
+  synthesisConfig?: RoleConfig
 }

@@ -60,11 +60,9 @@ export class AnthropicProvider implements AIProvider {
       }
     }
 
-    const temps: Record<string, number> = { low: 0.3, medium: 0.7, high: 1.0 }
     const response = await this.client.messages.create({
       ...baseParams,
       max_tokens: options.maxTokens ?? 1500,
-      temperature: temps[thinkingLevel],
     })
     const block = response.content[0]
     return block?.type === 'text' ? block.text : ''

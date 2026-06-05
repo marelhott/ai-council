@@ -29,6 +29,12 @@ const DEFAULT_WRAPUP_CONFIG: RoleConfig = {
   thinkingLevel: 'low',
 }
 
+const COUNCIL_EXAMPLES = [
+  'Máme zavést čtyřdenní pracovní týden v týmu o 12 lidech?',
+  'Má smysl spustit placený newsletter pro zakladatele menších firem?',
+  'Je lepší najmout prvního obchodníka teď, nebo ještě tři měsíce čekat?',
+]
+
 const LOADING_MESSAGES: Record<string, string> = {
   initial_responses: 'Rada odpovídá…',
   synthesizing: 'Vzniká společný závěr…',
@@ -308,6 +314,13 @@ export default function Council({ apiKeys }: { apiKeys: APIKeys }) {
           {turns.length === 0 ? (
             <div className="empty-state empty-state-large">
               <p>AI Council rozvine otázku do samostatných hlasů, rychlého vyhodnocení a společného závěru.</p>
+              <div className="example-row">
+                {COUNCIL_EXAMPLES.map(example => (
+                  <button key={example} type="button" className="example-chip" onClick={() => setInput(example)}>
+                    {example}
+                  </button>
+                ))}
+              </div>
               <RoleConfigStrip
                 configs={roleConfigs}
                 providers={providers}

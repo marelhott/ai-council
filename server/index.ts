@@ -2,6 +2,7 @@ import express from 'express'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { createProvider, createProviderFor, AVAILABLE_PROVIDERS, type RoleConfig } from './providers/index'
+import { fetchLiveModels } from './liveModels'
 
 const app = express()
 app.use(express.json())
@@ -9,7 +10,8 @@ app.use(express.json())
 const defaultProvider = createProvider()
 const distPath = path.resolve(process.cwd(), 'dist')
 
-// Expose available providers + which keys are set
+// ---- Providers & live models ----
+
 app.get('/api/providers', (_req, res) => {
   const available = AVAILABLE_PROVIDERS.map(p => ({
     ...p,
@@ -18,8 +20,42 @@ app.get('/api/providers', (_req, res) => {
   res.json({ providers: available })
 })
 
+// Live models — queries each provider's models API, cached 24h
+app.get('/api/models', async (_req, res) => {
+  try {
+    const models = await fetchLiveModels()
+    res.json(models)
+  } catch (err) {
+    console.error('models error:', err)
+    res.status(500).json({ error: 'Nepodařilo se načíst modely' })
+  }
+})
+
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, provider: defaultProvider.name, model: defaultProvider.model })
+})
+
+// ---- Pure chat (no system prompt, no roles) ----
+
+app.post('/api/pure-chat', async (req, res) => {
+  const { messages, modelConfig } = req.body as {
+    messages: Array<{ role: 'user' | 'assistant'; content: string }>
+    modelConfig: RoleConfig
+  }
+  if (!messages?.length) return res.status(400).json({ error: 'Chybí messages' })
+
+  try {
+    const p = createProviderFor(modelConfig)
+    const content = await p.generate({
+      messages: messages.map(m => ({ role: m.role, content: m.content })),
+      maxTokens: 1500,
+      thinkingLevel: modelConfig.thinkingLevel,
+    })
+    res.json({ content, providerName: p.name, modelName: modelConfig.model })
+  } catch (err) {
+    console.error('pure-chat error:', err)
+    res.status(500).json({ error: 'Generování se nezdařilo' })
+  }
 })
 
 // ---- Weakest Assumption ----

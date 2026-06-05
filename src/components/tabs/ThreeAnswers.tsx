@@ -1,239 +1,322 @@
+/**
+ * Tři odpovědi — čistý paralelní chat.
+ * Žádné role, žádné systémové prompty. Tři modely odpovídají stejně jako na normálním chatu.
+ * Uživatel si vybere 3 libovolné modely (klidně stejné) a chatuje s nimi paralelně.
+ */
 import { useState, useRef, useEffect } from 'react'
-import type { ConversationRound, RoleResponse, RoleConfig } from '../../types/index'
-import AIConfigPanel from '../ui/AIConfigPanel'
+import type { ProviderName, ThinkingLevel } from '../../types/index'
+import { useProviders, type LiveProvider } from '../ui/AIConfigPanel'
+
+// ---- Types ----
+
+interface SlotConfig {
+  provider: ProviderName
+  model: string
+  thinkingLevel: ThinkingLevel
+}
+
+interface ChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+  status?: 'done' | 'loading' | 'error'
+  error?: string
+}
+
+interface SlotState {
+  config: SlotConfig
+  messages: ChatMessage[]
+  loading: boolean
+}
+
+// ---- Constants ----
 
 const PROVIDER_COLORS: Record<string, string> = {
-  openai:    '#10a37f',
-  anthropic: '#d97706',
-  gemini:    '#4285f4',
-  claude:    '#d97706',
-  mock:      '#6b7280',
+  openai: '#10a37f', anthropic: '#d97706', gemini: '#4285f4', mock: '#6b7280',
 }
 
-const ROLE_COLORS: Record<string, string> = {
-  practical: '#10b981',
-  critical:  '#ef4444',
-  creative:  '#8b5cf6',
+const PROVIDER_LABELS: Record<string, string> = {
+  openai: 'OpenAI', anthropic: 'Claude', gemini: 'Gemini', mock: 'Mock',
 }
 
-const ROLES_CONFIG = [
-  { key: 'practical', label: 'Praktický poradce' },
-  { key: 'critical',  label: 'Kritický oponent' },
-  { key: 'creative',  label: 'Kreativní stratég' },
+const DEFAULT_SLOTS: SlotConfig[] = [
+  { provider: 'mock', model: 'mock-cs-v1', thinkingLevel: 'medium' },
+  { provider: 'mock', model: 'mock-cs-v1', thinkingLevel: 'medium' },
+  { provider: 'mock', model: 'mock-cs-v1', thinkingLevel: 'medium' },
 ]
 
-const DEFAULT_CONFIGS: Record<string, RoleConfig> = {
-  practical: { provider: 'mock', model: 'mock-cs-v1', thinkingLevel: 'medium' },
-  critical:  { provider: 'mock', model: 'mock-cs-v1', thinkingLevel: 'medium' },
-  creative:  { provider: 'mock', model: 'mock-cs-v1', thinkingLevel: 'medium' },
+// ---- Slot selector (provider + model + thinking) ----
+
+function SlotSelector({ config, providers, onChange, index }: {
+  config: SlotConfig
+  providers: LiveProvider[]
+  onChange: (c: SlotConfig) => void
+  index: number
+}) {
+  const pData = providers.find(p => p.provider === config.provider)
+  const models = pData?.models ?? []
+  const color = pData?.color ?? '#6b7280'
+
+  function setProvider(provider: ProviderName) {
+    const p = providers.find(p => p.provider === provider)
+    const model = p?.models[0]?.id ?? config.model
+    onChange({ ...config, provider, model })
+  }
+
+  return (
+    <div className="slot-selector">
+      <div className="slot-selector-header">
+        <span className="slot-num">Model {index + 1}</span>
+      </div>
+      {/* Provider pills */}
+      <div className="slot-provider-pills">
+        {providers.map(p => (
+          <button
+            key={p.provider}
+            className={`slot-provider-pill ${config.provider === p.provider ? 'active' : ''}`}
+            style={config.provider === p.provider ? { borderColor: p.color, color: p.color, background: p.color + '15' } : {}}
+            onClick={() => setProvider(p.provider)}
+            title={!p.hasKey && p.provider !== 'mock' ? 'API klíč není nastaven' : p.label}
+          >
+            {p.label}
+            {!p.hasKey && p.provider !== 'mock' && <span className="no-key-dot">!</span>}
+          </button>
+        ))}
+      </div>
+      {/* Model select */}
+      <select
+        className="ai-config-select"
+        value={config.model}
+        onChange={e => onChange({ ...config, model: e.target.value })}
+      >
+        {models.map(m => (
+          <option key={m.id} value={m.id}>{m.label}</option>
+        ))}
+      </select>
+      {/* Thinking level */}
+      <div className="slot-thinking">
+        {(['low', 'medium', 'high'] as ThinkingLevel[]).map(lvl => {
+          const labels = { low: 'Rychlé', medium: 'Standard', high: 'Hluboké' }
+          return (
+            <button
+              key={lvl}
+              className={`thinking-pill ${config.thinkingLevel === lvl ? 'active' : ''}`}
+              style={config.thinkingLevel === lvl ? { borderColor: color, color, background: color + '15' } : {}}
+              onClick={() => onChange({ ...config, thinkingLevel: lvl })}
+            >
+              {labels[lvl]}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
+
+// ---- Single chat column ----
 
 function renderMarkdown(text: string) {
   return text
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/^#{1,4} (.+)$/gm, '<strong>$1</strong>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
     .replace(/\n\n/g, '</p><p>')
     .replace(/\n/g, '<br/>')
     .replace(/^/, '<p>').replace(/$/, '</p>')
 }
 
-function AnswerCard({ response }: { response: RoleResponse }) {
-  const providerColor = PROVIDER_COLORS[response.providerName] ?? '#6b7280'
-  const roleColor = ROLE_COLORS[response.roleName] ?? '#6366f1'
-
-  return (
-    <div className="answer-card">
-      <div className="answer-card-header" style={{ borderTop: `3px solid ${roleColor}` }}>
-        <div className="answer-card-role">{response.roleLabel}</div>
-        <div className="provider-badge">
-          <span className="provider-dot" style={{ background: providerColor }} />
-          <span style={{ color: providerColor, fontWeight: 700 }}>
-            {response.providerName === 'mock' ? 'Mock' :
-             response.providerName === 'anthropic' ? 'Claude' :
-             response.providerName === 'openai' ? 'OpenAI' :
-             response.providerName === 'gemini' ? 'Gemini' :
-             response.providerName}
-          </span>
-          <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>
-            {' · '}{response.modelName === 'mock-cs-v1' ? 'Demo' : response.modelName}
-          </span>
-        </div>
-      </div>
-      <div className="answer-card-body">
-        {response.status === 'pending' && (
-          <div className="loading-state"><span className="spinner" /><span>Připravuji odpověď…</span></div>
-        )}
-        {response.status === 'error' && <div className="error-msg">{response.error}</div>}
-        {response.status === 'done' && (
-          <div className="prose" dangerouslySetInnerHTML={{ __html: renderMarkdown(response.content) }} />
-        )}
-      </div>
-    </div>
-  )
-}
-
-function RoundBlock({ round, index }: { round: ConversationRound; index: number }) {
-  return (
-    <div style={{ marginBottom: 32 }}>
-      <div className="round-header">Kolo {index + 1}</div>
-      {round.userPrompt && (
-        <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12, fontStyle: 'italic',
-          padding: '7px 12px', background: 'var(--bg-subtle)', borderRadius: 8, borderLeft: '3px solid var(--border)' }}>
-          „{round.userPrompt}"
-        </div>
-      )}
-      <div className="three-answers-grid">
-        {round.responses.map(r => <AnswerCard key={r.roleName} response={r} />)}
-      </div>
-    </div>
-  )
-}
-
-export default function ThreeAnswers() {
-  const [prompt, setPrompt] = useState('')
-  const [followUp, setFollowUp] = useState('')
-  const [rounds, setRounds] = useState<ConversationRound[]>([])
-  const [loading, setLoading] = useState(false)
-  const [roleConfigs, setRoleConfigs] = useState<Record<string, RoleConfig>>(DEFAULT_CONFIGS)
+function ChatColumn({ slot }: { slot: SlotState; index: number }) {
+  const color = PROVIDER_COLORS[slot.config.provider] ?? '#6b7280'
+  const providerLabel = PROVIDER_LABELS[slot.config.provider] ?? slot.config.provider
+  const modelLabel = slot.config.model === 'mock-cs-v1' ? 'Demo' : slot.config.model
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (rounds.length > 0) bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-  }, [rounds])
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }, [slot.messages.length])
 
-  async function fetchAnswers(userPrompt: string, isFollowUp: boolean) {
-    setLoading(true)
+  return (
+    <div className="chat-column">
+      <div className="chat-column-header" style={{ borderTop: `3px solid ${color}` }}>
+        <div className="provider-badge">
+          <span className="provider-dot" style={{ background: color }} />
+          <span style={{ color, fontWeight: 700 }}>{providerLabel}</span>
+          <span style={{ color: 'var(--text-muted)' }}>· {modelLabel}</span>
+        </div>
+      </div>
+      <div className="chat-column-body">
+        {slot.messages.length === 0 && !slot.loading && (
+          <div style={{ color: 'var(--text-muted)', fontSize: 13, textAlign: 'center', paddingTop: 24 }}>
+            Odpověď se zobrazí tady
+          </div>
+        )}
+        {slot.messages.map((msg, i) => (
+          <div key={i} className={`chat-msg chat-msg-${msg.role}`}>
+            {msg.role === 'user' ? (
+              <div className="chat-msg-user">{msg.content}</div>
+            ) : msg.status === 'loading' ? (
+              <div className="loading-state" style={{ padding: '8px 0' }}>
+                <span className="spinner" />
+                <span>Přemýšlí…</span>
+              </div>
+            ) : msg.status === 'error' ? (
+              <div className="error-msg">{msg.error ?? 'Chyba při generování.'}</div>
+            ) : (
+              <div className="prose chat-msg-ai" dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }} />
+            )}
+          </div>
+        ))}
+        <div ref={bottomRef} />
+      </div>
+    </div>
+  )
+}
 
-    const history = isFollowUp
-      ? rounds.flatMap(r => [
-          { role: 'user' as const, content: r.userPrompt, persona: 'all' },
-          ...r.responses.map(resp => ({ role: 'assistant' as const, content: resp.content, persona: resp.roleName })),
-        ])
-      : undefined
+// ---- Main component ----
 
-    const pendingRound: ConversationRound = {
-      id: crypto.randomUUID(),
-      userPrompt,
-      responses: ROLES_CONFIG.map(role => ({
-        roleName: role.key,
-        roleLabel: role.label,
-        providerName: roleConfigs[role.key].provider,
-        modelName: roleConfigs[role.key].model,
-        content: '',
-        status: 'pending',
-        error: null,
-      })),
-      createdAt: new Date().toISOString(),
-    }
+export default function ThreeAnswers() {
+  const providers = useProviders()
 
-    setRounds(prev => [...prev, pendingRound])
+  const [slots, setSlots] = useState<SlotState[]>(() =>
+    DEFAULT_SLOTS.map(config => ({ config, messages: [], loading: false }))
+  )
+  const [input, setInput] = useState('')
+  const [hasConversation, setHasConversation] = useState(false)
 
-    try {
-      const res = await fetch('/api/three-answers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: userPrompt, history, roleConfigs }),
+  // Sync provider defaults once providers are loaded
+  useEffect(() => {
+    if (!providers.length) return
+    setSlots(prev => prev.map(slot => {
+      const p = providers.find(p => p.provider === slot.config.provider)
+      if (!p) return slot
+      const modelExists = p.models.some(m => m.id === slot.config.model)
+      if (modelExists) return slot
+      return { ...slot, config: { ...slot.config, model: p.models[0]?.id ?? slot.config.model } }
+    }))
+  }, [providers.length])
+
+  function updateSlotConfig(i: number, config: SlotConfig) {
+    setSlots(prev => prev.map((s, idx) => idx === i ? { ...s, config } : s))
+  }
+
+  async function sendMessage() {
+    const prompt = input.trim()
+    if (!prompt) return
+    setInput('')
+    setHasConversation(true)
+
+    // Optimistically add user message + loading placeholder to each slot
+    setSlots(prev => prev.map(slot => ({
+      ...slot,
+      loading: true,
+      messages: [
+        ...slot.messages,
+        { role: 'user', content: prompt },
+        { role: 'assistant', content: '', status: 'loading' },
+      ],
+    })))
+
+    // Fire all 3 requests in parallel, each independent
+    await Promise.allSettled(
+      slots.map(async (slot, i) => {
+        const history = slot.messages
+          .filter(m => m.status !== 'loading')
+          .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }))
+
+        try {
+          const res = await fetch('/api/pure-chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              messages: [...history, { role: 'user', content: prompt }],
+              modelConfig: slot.config,
+            }),
+          })
+
+          if (!res.ok) throw new Error(`HTTP ${res.status}`)
+          const data: { content: string } = await res.json()
+
+          setSlots(prev => prev.map((s, idx) => {
+            if (idx !== i) return s
+            const msgs = [...s.messages]
+            msgs[msgs.length - 1] = { role: 'assistant', content: data.content, status: 'done' }
+            return { ...s, loading: false, messages: msgs }
+          }))
+        } catch (err) {
+          setSlots(prev => prev.map((s, idx) => {
+            if (idx !== i) return s
+            const msgs = [...s.messages]
+            msgs[msgs.length - 1] = { role: 'assistant', content: '', status: 'error', error: 'Nepodařilo se vygenerovat odpověď.' }
+            return { ...s, loading: false, messages: msgs }
+          }))
+        }
       })
-      if (!res.ok) throw new Error('Server error')
-      const data: { responses: RoleResponse[] } = await res.json()
-      setRounds(prev => prev.map(r => r.id === pendingRound.id ? { ...r, responses: data.responses } : r))
-    } catch {
-      setRounds(prev => prev.map(r =>
-        r.id === pendingRound.id
-          ? { ...r, responses: r.responses.map(resp => ({ ...resp, status: 'error', error: 'Tato odpověď se nepodařila vygenerovat.' })) }
-          : r
-      ))
-    } finally {
-      setLoading(false)
-    }
+    )
   }
 
-  function handleStart() {
-    if (!prompt.trim()) return
-    setRounds([])
-    fetchAnswers(prompt, false)
+  function clearAll() {
+    setSlots(prev => prev.map(s => ({ ...s, messages: [], loading: false })))
+    setHasConversation(false)
+    setInput('')
   }
 
-  function handleFollowUp() {
-    if (!followUp.trim() || loading) return
-    fetchAnswers(followUp, true)
-    setFollowUp('')
-  }
-
-  const hasRounds = rounds.length > 0
+  const anyLoading = slots.some(s => s.loading)
 
   return (
     <div className="workspace-layout">
+      {/* ── Left sidebar ── */}
       <aside className="workspace-sidebar">
         <div className="panel-card panel-card-sticky">
           <div className="tab-header">
             <h2>Tři odpovědi</h2>
-            <p className="sub">Polož libovolnou otázku a získej tři různé pohledy vedle sebe.</p>
+            <p className="sub">Čistý paralelní chat. Žádné role, žádné instrukce. Tři modely vedle sebe.</p>
           </div>
 
+          {/* Input */}
           <div className="input-form">
             <textarea
               className="main-input"
-              placeholder="Zeptej se na cokoli…"
-              value={prompt}
-              onChange={e => setPrompt(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && e.metaKey) handleStart() }}
-              rows={3}
+              placeholder="Napiš cokoliv…"
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && e.metaKey) sendMessage() }}
+              rows={4}
+              disabled={anyLoading}
             />
-            <button className="btn-primary" onClick={handleStart} disabled={loading || !prompt.trim()}>
-              {loading ? <><span className="spinner" /> Připravuji tři odpovědi…</> : 'Získat tři odpovědi'}
+            <button className="btn-primary" onClick={sendMessage} disabled={anyLoading || !input.trim()}>
+              {anyLoading ? <><span className="spinner" /> Generuji…</> : hasConversation ? 'Pokračovat' : 'Odeslat'}
             </button>
           </div>
 
-          {hasRounds && (
-            <div className="sidebar-actions">
-              <div className="sidebar-actions-title">Navázat na konverzaci</div>
-              <div className="follow-up-form-sidebar">
-                <textarea
-                  placeholder="Doplňující otázka…"
-                  value={followUp}
-                  onChange={e => setFollowUp(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && e.metaKey) handleFollowUp() }}
-                  disabled={loading}
-                />
-                <button className="btn-primary" onClick={handleFollowUp} disabled={loading || !followUp.trim()}>
-                  {loading ? <span className="spinner" /> : 'Zeptat se znovu'}
-                </button>
-              </div>
-              <button className="btn-secondary btn-secondary-block" onClick={() => { setRounds([]); setPrompt(''); setFollowUp('') }}>
-                Nová otázka
-              </button>
-            </div>
+          {hasConversation && (
+            <button className="btn-secondary btn-secondary-block" onClick={clearAll}>
+              Nový chat
+            </button>
           )}
 
-          {/* AI Config */}
-          <AIConfigPanel
-            roles={ROLES_CONFIG}
-            configs={roleConfigs}
-            onChange={setRoleConfigs}
-          />
+          {/* Model selectors */}
+          <div className="ai-config-panel">
+            <div className="sidebar-actions-title" style={{ padding: '10px 0 8px' }}>Výběr modelů</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {slots.map((slot, i) => (
+                <SlotSelector
+                  key={i}
+                  index={i}
+                  config={slot.config}
+                  providers={providers}
+                  onChange={cfg => updateSlotConfig(i, cfg)}
+                />
+              ))}
+            </div>
+          </div>
         </div>
       </aside>
 
-      <section className="workspace-results">
-        {hasRounds && (
-          <div className="results-toolbar">
-            Otázka: <strong>{prompt}</strong>
-          </div>
-        )}
-        {hasRounds ? (
-          <div>
-            {rounds.map((round, i) => <RoundBlock key={round.id} round={round} index={i} />)}
-            <div ref={bottomRef} />
-          </div>
-        ) : !loading ? (
-          <div className="empty-state empty-state-large">
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
-            </svg>
-            <p>Zadej otázku a vpravo se objeví tři vedle sebe porovnatelné odpovědi.</p>
-          </div>
-        ) : null}
+      {/* ── Right: 3 chat columns ── */}
+      <section className="workspace-results" style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <div className="chat-columns-grid">
+          {slots.map((slot, i) => (
+            <ChatColumn key={i} slot={slot} index={i} />
+          ))}
+        </div>
       </section>
     </div>
   )

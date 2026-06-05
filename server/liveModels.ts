@@ -22,26 +22,31 @@ export interface ProviderModels {
   source: 'live' | 'fallback'
 }
 
-// ---- Curated fallbacks (kept up-to-date as known defaults) ----
+// ---- Curated fallbacks — nejnovější modely vždy první ----
+// Aktualizováno: červen 2025
 
 const FALLBACK_OPENAI: ModelInfo[] = [
+  // Reasoning modely (nejnovější nahoře)
+  { id: 'o3',            label: 'o3',             provider: 'openai', isReasoning: true  },
+  { id: 'o4-mini',       label: 'o4-mini',        provider: 'openai', isReasoning: true  },
+  // Standardní modely
   { id: 'gpt-4.1',       label: 'GPT-4.1',        provider: 'openai', isReasoning: false },
   { id: 'gpt-4.1-mini',  label: 'GPT-4.1 Mini',   provider: 'openai', isReasoning: false },
   { id: 'gpt-4o',        label: 'GPT-4o',          provider: 'openai', isReasoning: false },
-  { id: 'o3',            label: 'o3',              provider: 'openai', isReasoning: true  },
-  { id: 'o4-mini',       label: 'o4-mini',         provider: 'openai', isReasoning: true  },
 ]
 
 const FALLBACK_ANTHROPIC: ModelInfo[] = [
+  // Seřazeno: nejnovější/nejvýkonnější první (live fetch vrátí skutečný aktuální seznam)
   { id: 'claude-opus-4-5',   label: 'Claude Opus 4.5',   provider: 'anthropic' },
   { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5', provider: 'anthropic' },
   { id: 'claude-haiku-3-5',  label: 'Claude Haiku 3.5',  provider: 'anthropic' },
 ]
 
 const FALLBACK_GEMINI: ModelInfo[] = [
-  { id: 'gemini-2.5-pro',   label: 'Gemini 2.5 Pro',   provider: 'gemini' },
-  { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash',  provider: 'gemini' },
-  { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash',  provider: 'gemini' },
+  // Seřazeno: nejnovější/nejvýkonnější první
+  { id: 'gemini-2.5-pro',        label: 'Gemini 2.5 Pro',        provider: 'gemini' },
+  { id: 'gemini-2.5-flash',      label: 'Gemini 2.5 Flash',      provider: 'gemini' },
+  { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite', provider: 'gemini' },
 ]
 
 const MOCK_MODELS: ModelInfo[] = [
@@ -76,7 +81,8 @@ function geminiLabel(id: string): string {
 
 // ---- Live fetchers ----
 
-const REASONING_IDS = new Set(['o1', 'o1-mini', 'o1-pro', 'o3', 'o3-mini', 'o3-pro', 'o4', 'o4-mini'])
+// Regex pro detekci reasoning modelů (o-série + budoucí)
+const REASONING_PATTERN = /^o\d/
 
 async function fetchOpenAIModels(): Promise<ModelInfo[]> {
   const key = process.env.OPENAI_API_KEY
@@ -88,30 +94,37 @@ async function fetchOpenAIModels(): Promise<ModelInfo[]> {
   })
   if (!r.ok) return FALLBACK_OPENAI
 
-  const data = await r.json() as { data: Array<{ id: string }> }
-  const keep = /^(gpt-4|gpt-4\.1|o1|o2|o3|o4|gpt-4o)/
+  const data = await r.json() as { data: Array<{ id: string; created?: number }> }
+
+  // Zahrň: gpt-4+, o-serie, gpt-5+ (budoucí)
+  const keep = /^(gpt-[45]|o\d|chatgpt-4)/
+
+  // Vylučuj: starší/specifické varianty
+  const exclude = /audio|realtime|vision|turbo|instruct|dalle|tts|whisper|babbage|davinci|2023-|2022-/
 
   const models = data.data
-    .filter(m => keep.test(m.id))
-    .filter(m => !m.id.includes('audio') && !m.id.includes('realtime') && !m.id.includes('preview') && !m.id.includes('vision') && !m.id.includes('turbo') && !m.id.includes('2024') && !m.id.includes('2023'))
+    .filter(m => keep.test(m.id) && !exclude.test(m.id))
     .map(m => ({
       id: m.id,
       label: openAILabel(m.id),
       provider: 'openai' as const,
-      isReasoning: REASONING_IDS.has(m.id),
+      isReasoning: REASONING_PATTERN.test(m.id),
+      created: m.created ?? 0,
     }))
 
-  // Sort: put flagship models first
-  const ORDER = ['gpt-4.1', 'gpt-4o', 'o4-mini', 'o3', 'o4', 'gpt-4.1-mini']
+  // Seřaď: reasoning modely první (jsou nejnovější), pak standardní, vše od nejnovějšího
   models.sort((a, b) => {
-    const ai = ORDER.indexOf(a.id), bi = ORDER.indexOf(b.id)
-    if (ai !== -1 && bi !== -1) return ai - bi
-    if (ai !== -1) return -1
-    if (bi !== -1) return 1
-    return a.id.localeCompare(b.id)
+    const aReason = REASONING_PATTERN.test(a.id)
+    const bReason = REASONING_PATTERN.test(b.id)
+    if (aReason && !bReason) return -1
+    if (!aReason && bReason) return 1
+    // V rámci skupiny: nejnovější (vyšší created) první
+    return (b.created ?? 0) - (a.created ?? 0)
   })
 
-  return models.length >= 2 ? models : FALLBACK_OPENAI
+  // Odstraň 'created' z výstupu
+  const result = models.map(({ created: _c, ...m }) => m)
+  return result.length >= 2 ? result : FALLBACK_OPENAI
 }
 
 async function fetchAnthropicModels(): Promise<ModelInfo[]> {

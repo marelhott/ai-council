@@ -1,10 +1,12 @@
 import type { AIProvider, GenerateOptions } from './interface'
 
+// Fallback statický seznam — /api/models vrací živý aktuální seznam
 export const OPENAI_MODELS = [
-  { id: 'gpt-4.1',      label: 'GPT-4.1',       reasoning: false },
-  { id: 'gpt-4.1-mini', label: 'GPT-4.1 Mini',  reasoning: false },
-  { id: 'o4-mini',      label: 'o4 Mini',        reasoning: true  },
   { id: 'o3',           label: 'o3',             reasoning: true  },
+  { id: 'o4-mini',      label: 'o4-mini',        reasoning: true  },
+  { id: 'gpt-4.1',      label: 'GPT-4.1',        reasoning: false },
+  { id: 'gpt-4.1-mini', label: 'GPT-4.1 Mini',   reasoning: false },
+  { id: 'gpt-4o',       label: 'GPT-4o',         reasoning: false },
 ]
 
 const REASONING_EFFORT: Record<string, string> = {
@@ -29,7 +31,8 @@ export class OpenAIProvider implements AIProvider {
 
     const model = options.model ?? this.model
     const level = options.thinkingLevel ?? 'medium'
-    const isReasoning = OPENAI_MODELS.find(m => m.id === model)?.reasoning ?? false
+    // Detekuj reasoning model podle ID (o1, o2, o3, o4, o5... — obecný pattern)
+    const isReasoning = /^o\d/.test(model) || OPENAI_MODELS.find(m => m.id === model)?.reasoning === true
 
     const systemMsg = options.messages.find(m => m.role === 'system')
     const userMessages = options.messages.filter(m => m.role !== 'system')

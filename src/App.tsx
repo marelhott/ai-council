@@ -8,14 +8,14 @@ import './index.css'
 type Tab = 'weakest' | 'three' | 'perspectives' | 'council'
 
 const TABS: Array<{ id: Tab; label: string; hint: string }> = [
+  { id: 'weakest',      label: 'Nejslabší předpoklad', hint: 'Kde se to může celé rozbít?' },
   { id: 'three',        label: 'Tři odpovědi',          hint: 'Čistý paralelní chat, bez rolí.' },
   { id: 'perspectives', label: 'Tři pohledy',           hint: 'Poradce, oponent, stratég.' },
-  { id: 'weakest',      label: 'Nejslabší předpoklad',  hint: 'Kde se to může celé rozbít?' },
   { id: 'council',      label: 'AI Council',            hint: 'Více rolí, vzájemná kritika, závěr.' },
 ]
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<Tab>('three')
+  const [activeTab, setActiveTab] = useState<Tab>('weakest')
 
   return (
     <div className="app-shell">

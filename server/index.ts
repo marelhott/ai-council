@@ -184,12 +184,10 @@ app.post('/api/brainstorm', async (req, res) => {
 
     let currentPrompt = prompt
     const sequence = [
-      { provider: openaiProvider, speaker: 'openai' as const, speakerLabel: 'GPT-5.5', modelName: gptConfig.model, thinkingLevel: gptConfig.thinkingLevel, maxTokens: 700 },
-      { provider: anthropicProvider, speaker: 'anthropic' as const, speakerLabel: 'Claude Opus', modelName: claudeConfig.model, thinkingLevel: claudeConfig.thinkingLevel, maxTokens: 700 },
-      { provider: openaiProvider, speaker: 'openai' as const, speakerLabel: 'GPT-5.5', modelName: gptConfig.model, thinkingLevel: gptConfig.thinkingLevel, maxTokens: 700 },
-      { provider: anthropicProvider, speaker: 'anthropic' as const, speakerLabel: 'Claude Opus', modelName: claudeConfig.model, thinkingLevel: claudeConfig.thinkingLevel, maxTokens: 700 },
-      { provider: openaiProvider, speaker: 'openai' as const, speakerLabel: 'GPT-5.5', modelName: gptConfig.model, thinkingLevel: gptConfig.thinkingLevel, maxTokens: 700 },
-      { provider: anthropicProvider, speaker: 'anthropic' as const, speakerLabel: 'Claude Opus', modelName: claudeConfig.model, thinkingLevel: claudeConfig.thinkingLevel, maxTokens: 700 },
+      { provider: openaiProvider, speaker: 'openai' as const, speakerLabel: 'GPT-5.5', modelName: gptConfig.model, thinkingLevel: gptConfig.thinkingLevel, maxTokens: 450 },
+      { provider: anthropicProvider, speaker: 'anthropic' as const, speakerLabel: 'Claude Opus', modelName: claudeConfig.model, thinkingLevel: claudeConfig.thinkingLevel, maxTokens: 450 },
+      { provider: openaiProvider, speaker: 'openai' as const, speakerLabel: 'GPT-5.5', modelName: gptConfig.model, thinkingLevel: gptConfig.thinkingLevel, maxTokens: 450 },
+      { provider: anthropicProvider, speaker: 'anthropic' as const, speakerLabel: 'Claude Opus', modelName: claudeConfig.model, thinkingLevel: claudeConfig.thinkingLevel, maxTokens: 450 },
     ]
 
     for (const step of sequence) {

@@ -116,20 +116,26 @@ export default function AIConfigPanel({ roles, configs, onChange, defaultOpen = 
                   </div>
                   <div className="ai-config-field">
                     <label>
-                      Model
+                      Model — napiš libovolné ID
                       {pData?.source === 'live' && (
                         <span style={{ marginLeft: 6, fontSize: 9, color: 'var(--success)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>● live</span>
                       )}
                     </label>
-                    <select
+                    <input
+                      type="text"
                       className="ai-config-select"
+                      list={`models-${role.key}`}
                       value={cfg.model}
                       onChange={e => updateConfig(role.key, { model: e.target.value })}
-                    >
+                      placeholder="např. gpt-4.1, o3, claude-sonnet-4-5..."
+                      spellCheck={false}
+                      autoComplete="off"
+                    />
+                    <datalist id={`models-${role.key}`}>
                       {models.map(m => (
                         <option key={m.id} value={m.id}>{m.label}</option>
                       ))}
-                    </select>
+                    </datalist>
                   </div>
                   <div className="ai-config-field">
                     <label>Přemýšlení</label>

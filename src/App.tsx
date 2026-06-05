@@ -3,17 +3,19 @@ import WeakestAssumption from './components/tabs/WeakestAssumption'
 import ThreeAnswers from './components/tabs/ThreeAnswers'
 import ThreePerspectives from './components/tabs/ThreePerspectives'
 import Council from './components/tabs/Council'
+import Brainstorm from './components/tabs/Brainstorm'
 import SettingsPanel from './components/ui/SettingsPanel'
 import { useProviders } from './components/ui/useProviders'
 import type { APIKeys } from './types/index'
 import './index.css'
 
-type Tab = 'weakest' | 'three' | 'perspectives' | 'council'
+type Tab = 'weakest' | 'three' | 'perspectives' | 'council' | 'brainstorm'
 
 const TABS: Array<{ id: Tab; label: string; hint: string }> = [
   { id: 'three', label: 'Tři odpovědi', hint: 'Čistý paralelní chat, bez rolí.' },
   { id: 'perspectives', label: 'Tři pohledy', hint: 'Poradce, oponent, stratég.' },
   { id: 'council', label: 'AI Council', hint: 'Více rolí, vzájemná kritika, závěr.' },
+  { id: 'brainstorm', label: 'Brainstorm', hint: 'GPT-5.5 a Claude Opus si brousí odpověď mezi sebou.' },
   { id: 'weakest', label: 'Nejslabší předpoklad', hint: 'Kde se to může celé rozbít?' },
 ]
 
@@ -82,6 +84,7 @@ export default function App() {
         {activeTab === 'three' && <ThreeAnswers apiKeys={apiKeys} />}
         {activeTab === 'perspectives' && <ThreePerspectives apiKeys={apiKeys} />}
         {activeTab === 'council' && <Council apiKeys={apiKeys} />}
+        {activeTab === 'brainstorm' && <Brainstorm apiKeys={apiKeys} />}
       </div>
 
       {settingsOpen && (

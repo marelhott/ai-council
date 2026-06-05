@@ -126,3 +126,15 @@ export interface CouncilPayload {
   roleConfigs?: Record<string, RoleConfig>
   synthesisConfig?: RoleConfig
 }
+
+// ---- Brainstorm ----
+
+export interface BrainstormMessage {
+  role: 'user' | 'assistant'
+  speaker: 'user' | 'openai' | 'anthropic'
+  speakerLabel: string
+  modelName?: string
+  content: string
+  status?: ResponseStatus
+  error?: string | null
+}

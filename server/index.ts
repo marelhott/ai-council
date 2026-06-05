@@ -155,6 +155,66 @@ app.post('/api/pure-chat', async (req, res) => {
   }
 })
 
+// ---- Brainstorm ----
+
+app.post('/api/brainstorm', async (req, res) => {
+  const { prompt, openaiConfig, anthropicConfig } = req.body as {
+    prompt: string
+    openaiConfig?: RoleConfig
+    anthropicConfig?: RoleConfig
+  }
+  if (!prompt?.trim()) return res.status(400).json({ error: 'Chybí prompt' })
+
+  const apiKeys = readApiKeys(req.body)
+  const gptConfig = openaiConfig ?? { provider: 'openai' as const, model: 'gpt-5.5', thinkingLevel: 'low' as const }
+  const claudeConfig = anthropicConfig ?? { provider: 'anthropic' as const, model: 'claude-opus-4-8', thinkingLevel: 'low' as const }
+
+  try {
+    const openaiProvider = createProviderFor(gptConfig, apiKeys)
+    const anthropicProvider = createProviderFor(claudeConfig, apiKeys)
+    const messages: Array<{
+      role: 'assistant'
+      speaker: 'openai' | 'anthropic'
+      speakerLabel: string
+      modelName: string
+      content: string
+      status: 'done'
+      error: null
+    }> = []
+
+    let currentPrompt = prompt
+    const sequence = [
+      { provider: openaiProvider, speaker: 'openai' as const, speakerLabel: 'GPT-5.5', modelName: gptConfig.model, thinkingLevel: gptConfig.thinkingLevel, maxTokens: 700 },
+      { provider: anthropicProvider, speaker: 'anthropic' as const, speakerLabel: 'Claude Opus', modelName: claudeConfig.model, thinkingLevel: claudeConfig.thinkingLevel, maxTokens: 700 },
+      { provider: openaiProvider, speaker: 'openai' as const, speakerLabel: 'GPT-5.5', modelName: gptConfig.model, thinkingLevel: gptConfig.thinkingLevel, maxTokens: 700 },
+      { provider: anthropicProvider, speaker: 'anthropic' as const, speakerLabel: 'Claude Opus', modelName: claudeConfig.model, thinkingLevel: claudeConfig.thinkingLevel, maxTokens: 700 },
+    ]
+
+    for (const step of sequence) {
+      const content = await step.provider.generate({
+        messages: [{ role: 'user', content: currentPrompt }],
+        maxTokens: step.maxTokens,
+        thinkingLevel: step.thinkingLevel,
+      })
+      messages.push({
+        role: 'assistant',
+        speaker: step.speaker,
+        speakerLabel: step.speakerLabel,
+        modelName: step.modelName,
+        content,
+        status: 'done',
+        error: null,
+      })
+      currentPrompt = content
+    }
+
+    res.json({ messages })
+  } catch (err) {
+    console.error('brainstorm error:', err)
+    res.status(errorStatus(err)).json({ error: errorMessage(err) })
+  }
+})
+
 // ---- Weakest Assumption ----
 
 const WEAKEST_SYSTEM = `Jsi tvrdý, ale užitečný oponent. Tvým cílem je najít nejslabší předpoklad v nápadu nebo rozhodnutí uživatele.

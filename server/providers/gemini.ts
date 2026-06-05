@@ -1,4 +1,5 @@
 import { ProviderResponseError, type AIProvider, type APIKeys, type GenerateOptions } from './interface'
+import { parseSSE } from './streamUtils'
 
 export const GEMINI_MODELS = [
   { id: 'gemini-3.5-flash',     label: 'Gemini 3.5 Flash'     },
@@ -73,5 +74,56 @@ export class GeminiProvider implements AIProvider {
       throw new ProviderResponseError(`Gemini odpověď zablokovalo: ${data.promptFeedback.blockReason}`)
     }
     throw new ProviderResponseError(`Gemini vrátilo prázdnou odpověď pro model ${model}.`)
+  }
+
+  async *stream(options: GenerateOptions): AsyncGenerator<string> {
+    const apiKey = this.apiKey
+    if (!apiKey) throw new Error('GEMINI_API_KEY není nastavený.')
+
+    const model = options.model ?? this.model
+    const level = options.thinkingLevel ?? 'medium'
+    const temp = TEMPERATURES[level]
+    const systemMsg = options.messages.find(m => m.role === 'system')
+    const userMessages = options.messages.filter(m => m.role !== 'system')
+
+    const contents = userMessages.map(m => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }],
+    }))
+
+    const body: Record<string, unknown> = {
+      system_instruction: systemMsg ? { parts: [{ text: systemMsg.content }] } : undefined,
+      contents,
+      generationConfig: {
+        temperature: temp,
+        maxOutputTokens: options.maxTokens ?? 1500,
+      },
+    }
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+      body: JSON.stringify(body),
+    })
+
+    if (!response.ok) {
+      const err = await response.text()
+      throw new Error(`Gemini selhal (${response.status}): ${err.slice(0, 200)}`)
+    }
+
+    let emittedText = ''
+    for await (const message of parseSSE(response)) {
+      const payload = JSON.parse(message.data) as {
+        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
+      }
+      const text = payload.candidates?.[0]?.content?.parts?.map(part => part.text ?? '').join('') ?? ''
+      if (!text || !text.startsWith(emittedText)) continue
+      const delta = text.slice(emittedText.length)
+      if (delta) {
+        emittedText = text
+        yield delta
+      }
+    }
   }
 }

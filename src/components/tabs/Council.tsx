@@ -4,12 +4,19 @@ import ModelPicker from '../ui/ModelPicker'
 import SafeMarkdown from '../ui/SafeMarkdown'
 import { TEXT_ATTACHMENT_ACCEPT, useComposerAttachments } from '../ui/useComposerAttachments'
 import { useProviders } from '../ui/useProviders'
+import { streamChatCompletion } from '../../lib/streaming'
 
 const COUNCIL_ROLES_CONFIG = [
   { key: 'practitioner', label: 'Praktik' },
   { key: 'skeptic', label: 'Skeptik' },
   { key: 'strategist', label: 'Stratég' },
 ]
+
+const COUNCIL_ROLE_SYSTEMS: Record<string, string> = {
+  practitioner: 'Jsi Praktik v AI radě. Zaměřuješ se na proveditelnost, náklady, čas a realitu. Odpovídáš konkrétně, bez zbytečné teorie. Odpovídej v češtině.',
+  skeptic: 'Jsi Skeptik v AI radě. Hledáš rizika, slabiny, slepé skvrny a protiargumenty. Buď tvrdý a konkrétní. Odpovídej v češtině.',
+  strategist: 'Jsi Stratég v AI radě. Řešíš širší smysl, positioning, alternativy a dlouhodobou hodnotu. Buď konkrétní. Odpovídej v češtině.',
+}
 
 const ROLE_COLORS: Record<string, string> = {
   practitioner: '#10b981',
@@ -221,14 +228,126 @@ export default function Council({ apiKeys }: { apiKeys: APIKeys }) {
     const turnId = crypto.randomUUID()
     const baseSession: CouncilSession = {
       status: 'initial_responses',
-      initialResponses: [],
+      initialResponses: COUNCIL_ROLES_CONFIG.map(role => ({
+        roleName: role.key,
+        roleLabel: role.label,
+        providerName: roleConfigs[role.key].provider,
+        modelName: roleConfigs[role.key].model,
+        content: '',
+        status: 'loading',
+        error: null,
+      })),
       evaluations: [],
       synthesis: null,
       error: null,
     }
+    const collectedInitialResponses = baseSession.initialResponses.map(response => ({ ...response }))
     setTurns(previous => [...previous, { id: turnId, prompt, session: baseSession }])
 
     try {
+      await Promise.all(
+        COUNCIL_ROLES_CONFIG.map(async role => {
+          const config = roleConfigs[role.key]
+          try {
+            await streamChatCompletion({
+              messages: [
+                { role: 'system', content: COUNCIL_ROLE_SYSTEMS[role.key] },
+                { role: 'user', content: promptWithAttachments },
+              ],
+              modelConfig: config,
+              apiKeys,
+              maxTokens: 420,
+              onDelta: delta => {
+                const current = collectedInitialResponses.find(response => response.roleName === role.key)
+                if (current) {
+                  current.content += delta
+                  current.status = 'loading'
+                }
+                setTurns(previous =>
+                  previous.map(turn =>
+                    turn.id !== turnId
+                      ? turn
+                      : {
+                          ...turn,
+                          session: {
+                            ...turn.session,
+                            initialResponses: turn.session.initialResponses.map(response =>
+                              response.roleName !== role.key
+                                ? response
+                                : {
+                                    ...response,
+                                    content: `${response.content}${delta}`,
+                                    status: 'loading',
+                                  }
+                            ),
+                          },
+                        }
+                  )
+                )
+              },
+            })
+
+            setTurns(previous =>
+              previous.map(turn =>
+                turn.id !== turnId
+                  ? turn
+                  : {
+                      ...turn,
+                      session: {
+                        ...turn.session,
+                        initialResponses: turn.session.initialResponses.map(response =>
+                          response.roleName !== role.key
+                            ? response
+                            : { ...response, status: 'done', error: null }
+                        ),
+                      },
+                    }
+              )
+            )
+            const current = collectedInitialResponses.find(response => response.roleName === role.key)
+            if (current) {
+              current.status = 'done'
+              current.error = null
+            }
+          } catch (error) {
+            setTurns(previous =>
+              previous.map(turn =>
+                turn.id !== turnId
+                  ? turn
+                  : {
+                      ...turn,
+                      session: {
+                        ...turn.session,
+                        initialResponses: turn.session.initialResponses.map(response =>
+                          response.roleName !== role.key
+                            ? response
+                            : {
+                                ...response,
+                                status: 'error',
+                                error: error instanceof Error ? error.message : 'Něco se nepodařilo. Zkus to prosím znovu.',
+                              }
+                        ),
+                      },
+                    }
+              )
+            )
+            const current = collectedInitialResponses.find(response => response.roleName === role.key)
+            if (current) {
+              current.status = 'error'
+              current.error = error instanceof Error ? error.message : 'Něco se nepodařilo. Zkus to prosím znovu.'
+            }
+          }
+        })
+      )
+
+      setTurns(previous =>
+        previous.map(turn =>
+          turn.id !== turnId
+            ? turn
+            : { ...turn, session: { ...turn.session, status: 'synthesizing' } }
+        )
+      )
+
       const response = await fetch('/api/council', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -236,6 +355,7 @@ export default function Council({ apiKeys }: { apiKeys: APIKeys }) {
           prompt: promptWithAttachments,
           roleConfigs,
           synthesisConfig: wrapupConfig,
+          initialResponses: collectedInitialResponses,
           apiKeys,
         }),
       })
@@ -365,6 +485,14 @@ export default function Council({ apiKeys }: { apiKeys: APIKeys }) {
                           </div>
                           {response.status === 'error' ? (
                             <div className="error-msg">{response.error ?? 'Tato odpověď se nepodařila vygenerovat.'}</div>
+                          ) : response.status === 'loading' ? (
+                            <>
+                              {response.content ? <SafeMarkdown text={response.content} className="section-content" /> : null}
+                              <div className="loading-state">
+                                <span className="spinner" />
+                                <span>Generuji odpověď…</span>
+                              </div>
+                            </>
                           ) : (
                             <SafeMarkdown text={response.content} className="section-content" />
                           )}

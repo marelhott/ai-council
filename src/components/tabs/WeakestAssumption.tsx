@@ -4,6 +4,7 @@ import ModelPicker from '../ui/ModelPicker'
 import SafeMarkdown from '../ui/SafeMarkdown'
 import { TEXT_ATTACHMENT_ACCEPT, useComposerAttachments } from '../ui/useComposerAttachments'
 import { useProviders } from '../ui/useProviders'
+import { streamChatCompletion } from '../../lib/streaming'
 
 const EXAMPLES = [
   'Chci spustit službu, kde si zákazník vybere termín a systém přiřadí řemeslníka.',
@@ -26,6 +27,7 @@ interface AnalysisTurn {
   result: WeakestAssumptionResult | null
   error: string | null
   loading: boolean
+  draft: string
 }
 
 const DEFAULT_ANALYSIS_CONFIG: RoleConfig = {
@@ -33,6 +35,8 @@ const DEFAULT_ANALYSIS_CONFIG: RoleConfig = {
   model: 'claude-sonnet-4-6',
   thinkingLevel: 'medium',
 }
+
+const STREAMING_ANALYSIS_SYSTEM = 'Jsi tvrdý, ale užitečný oponent. Najdi nejslabší předpoklad, slepé místo, konkrétní riziko, první test a doporučený další krok. Buď stručný, konkrétní a odpovídej v češtině s jasnými mezititulky.'
 
 function verdictClass(verdict: string) {
   return verdict === 'nejdřív ověřit' ? 'nejdřív-ověřit' : verdict
@@ -146,10 +150,29 @@ export default function WeakestAssumption({ apiKeys }: { apiKeys: APIKeys }) {
 
     setLoading(true)
     const turnId = crypto.randomUUID()
-    setTurns(previous => [...previous, { id: turnId, prompt, result: null, error: null, loading: true }])
+    setTurns(previous => [...previous, { id: turnId, prompt, result: null, error: null, loading: true, draft: '' }])
     setInput('')
 
     try {
+      await streamChatCompletion({
+        messages: [
+          { role: 'system', content: STREAMING_ANALYSIS_SYSTEM },
+          { role: 'user', content: promptWithAttachments },
+        ],
+        modelConfig: analysisConfig,
+        apiKeys,
+        maxTokens: 700,
+        onDelta: delta => {
+          setTurns(previous =>
+            previous.map(turn =>
+              turn.id === turnId
+                ? { ...turn, draft: `${turn.draft}${delta}` }
+                : turn
+            )
+          )
+        },
+      })
+
       const response = await fetch('/api/weakest-assumption', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -223,10 +246,13 @@ export default function WeakestAssumption({ apiKeys }: { apiKeys: APIKeys }) {
                 <div className="thread-message thread-message-assistant">
                   <div className="thread-message-meta">AI Council</div>
                   {turn.loading ? (
-                    <div className="loading-state">
-                      <span className="spinner" />
-                      <span>Analyzuji nejslabší předpoklad…</span>
-                    </div>
+                    <>
+                      {turn.draft ? <SafeMarkdown text={turn.draft} className="thread-message-content" /> : null}
+                      <div className="loading-state">
+                        <span className="spinner" />
+                        <span>Analyzuji nejslabší předpoklad…</span>
+                      </div>
+                    </>
                   ) : turn.error ? (
                     <div className="error-msg">{turn.error}</div>
                   ) : turn.result ? (

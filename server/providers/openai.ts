@@ -1,4 +1,5 @@
 import { ProviderResponseError, type AIProvider, type APIKeys, type GenerateOptions } from './interface'
+import { parseSSE } from './streamUtils'
 
 // Fallback statický seznam — /api/models vrací živý aktuální seznam
 export const OPENAI_MODELS = [
@@ -77,6 +78,74 @@ export class OpenAIProvider implements AIProvider {
     if (content) return content
     if (message?.refusal) throw new ProviderResponseError(`OpenAI odmítlo odpovědět: ${message.refusal}`)
     throw new ProviderResponseError(`OpenAI vrátilo prázdnou odpověď pro model ${model}.`)
+  }
+
+  async *stream(options: GenerateOptions): AsyncGenerator<string> {
+    const apiKey = this.apiKey
+    if (!apiKey) throw new Error('OPENAI_API_KEY není nastavený.')
+
+    const model = options.model ?? this.model
+    const level = options.thinkingLevel ?? 'medium'
+    const isReasoning = /^o\d/.test(model) || /^gpt-5/.test(model) || OPENAI_MODELS.find(m => m.id === model)?.reasoning === true
+
+    if (isReasoning) {
+      const body: Record<string, unknown> = {
+        model,
+        input: options.messages.map(message => ({
+          role: message.role,
+          content: [{ type: 'input_text', text: message.content }],
+        })),
+        max_output_tokens: options.maxTokens ?? 1500,
+        reasoning: { effort: REASONING_EFFORT[level] },
+        stream: true,
+      }
+
+      const response = await fetch('https://api.openai.com/v1/responses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify(body),
+      })
+
+      if (!response.ok) {
+        const err = await response.text()
+        throw new Error(`OpenAI selhal (${response.status}): ${err.slice(0, 200)}`)
+      }
+
+      for await (const message of parseSSE(response)) {
+        if (message.data === '[DONE]') break
+        const payload = JSON.parse(message.data) as { type?: string; delta?: string }
+        if (payload.type === 'response.output_text.delta' && payload.delta) {
+          yield payload.delta
+        }
+      }
+      return
+    }
+
+    const body: Record<string, unknown> = {
+      model,
+      messages: options.messages.map(message => ({ role: message.role, content: message.content })),
+      max_completion_tokens: options.maxTokens ?? 1500,
+      temperature: TEMPERATURES[level],
+      stream: true,
+    }
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify(body),
+    })
+
+    if (!response.ok) {
+      const err = await response.text()
+      throw new Error(`OpenAI selhal (${response.status}): ${err.slice(0, 200)}`)
+    }
+
+    for await (const message of parseSSE(response)) {
+      if (message.data === '[DONE]') break
+      const payload = JSON.parse(message.data) as { choices?: Array<{ delta?: { content?: string } }> }
+      const delta = payload.choices?.[0]?.delta?.content
+      if (delta) yield delta
+    }
   }
 
   private async generateViaResponsesApi(

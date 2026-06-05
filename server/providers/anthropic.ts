@@ -67,4 +67,54 @@ export class AnthropicProvider implements AIProvider {
     const block = response.content[0]
     return block?.type === 'text' ? block.text : ''
   }
+
+  async *stream(options: GenerateOptions): AsyncGenerator<string> {
+    const model = options.model ?? this.model
+    const thinkingLevel = options.thinkingLevel ?? 'medium'
+    const budget = THINKING_BUDGETS[thinkingLevel]
+
+    const systemMsg = options.messages.find(m => m.role === 'system')
+    const userMessages = options.messages
+      .filter(m => m.role !== 'system')
+      .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }))
+
+    const baseParams = {
+      model,
+      system: systemMsg?.content,
+      messages: userMessages,
+    }
+
+    const supportsThinking = !model.includes('haiku') && budget > 0
+    if (supportsThinking) {
+      try {
+        const stream = this.client.messages.stream({
+          ...baseParams,
+          max_tokens: (options.maxTokens ?? 1500) + budget,
+          thinking: { type: 'enabled', budget_tokens: budget },
+        } as Parameters<typeof this.client.messages.stream>[0])
+
+        for await (const event of stream) {
+          if (event.type === 'content_block_delta' && event.delta.type === 'text_delta' && event.delta.text) {
+            yield event.delta.text
+          }
+        }
+        return
+      } catch (error) {
+        const message = error instanceof Error ? error.message : ''
+        const incompatibleThinking = message.includes('thinking.type.enabled') || message.includes('budget_tokens')
+        if (!incompatibleThinking) throw error
+      }
+    }
+
+    const stream = this.client.messages.stream({
+      ...baseParams,
+      max_tokens: options.maxTokens ?? 1500,
+    })
+
+    for await (const event of stream) {
+      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta' && event.delta.text) {
+        yield event.delta.text
+      }
+    }
+  }
 }

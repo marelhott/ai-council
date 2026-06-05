@@ -4,6 +4,7 @@ import SafeMarkdown from '../ui/SafeMarkdown'
 import { TEXT_ATTACHMENT_ACCEPT, useComposerAttachments } from '../ui/useComposerAttachments'
 import { getModelLabel } from '../ui/modelLabels'
 import { useProviders, type LiveProvider } from '../ui/useProviders'
+import { streamChatCompletion } from '../../lib/streaming'
 
 interface SlotConfig {
   provider: ProviderName
@@ -213,10 +214,15 @@ function ChatColumn({
             <div className="thread-message-meta">{message.role === 'user' ? 'Ty' : providerLabel}</div>
 
             {message.role === 'assistant' && message.status === 'loading' ? (
-              <div className="loading-state">
-                <span className="spinner" />
-                <span>Přemýšlí…</span>
-              </div>
+              <>
+                {message.content ? (
+                  <SafeMarkdown text={message.content} className="thread-message-content" />
+                ) : null}
+                <div className="loading-state">
+                  <span className="spinner" />
+                  <span>Generuji odpověď…</span>
+                </div>
+              </>
             ) : message.role === 'assistant' && message.status === 'error' ? (
               <div className="error-msg">{message.error ?? 'Nepodařilo se vygenerovat odpověď.'}</div>
             ) : (
@@ -295,27 +301,33 @@ export default function ThreeAnswers({ apiKeys }: { apiKeys: APIKeys }) {
           .map(message => ({ role: message.role as 'user' | 'assistant', content: message.content }))
 
         try {
-          const response = await fetch('/api/pure-chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              messages: [...history, { role: 'user', content: promptWithAttachments }],
-              modelConfig: slot.config,
-              apiKeys,
-            }),
+          await streamChatCompletion({
+            messages: [...history, { role: 'user', content: promptWithAttachments }],
+            modelConfig: slot.config,
+            apiKeys,
+            onDelta: delta => {
+              setSlots(previous =>
+                previous.map((currentSlot, slotIndex) => {
+                  if (slotIndex !== index) return currentSlot
+                  const nextMessages = [...currentSlot.messages]
+                  const current = nextMessages[nextMessages.length - 1]
+                  nextMessages[nextMessages.length - 1] = {
+                    role: 'assistant',
+                    content: `${current?.content ?? ''}${delta}`,
+                    status: 'loading',
+                  }
+                  return { ...currentSlot, messages: nextMessages }
+                }),
+              )
+            },
           })
-
-          if (!response.ok) {
-            const payload = await response.json().catch(() => null) as { error?: string } | null
-            throw new Error(payload?.error ?? `HTTP ${response.status}`)
-          }
-          const data: { content: string } = await response.json()
 
           setSlots(previous =>
             previous.map((currentSlot, slotIndex) => {
               if (slotIndex !== index) return currentSlot
               const nextMessages = [...currentSlot.messages]
-              nextMessages[nextMessages.length - 1] = { role: 'assistant', content: data.content, status: 'done' }
+              const current = nextMessages[nextMessages.length - 1]
+              nextMessages[nextMessages.length - 1] = { role: 'assistant', content: current?.content ?? '', status: 'done' }
               return { ...currentSlot, loading: false, messages: nextMessages }
             })
           )

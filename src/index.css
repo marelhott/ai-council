@@ -239,6 +239,10 @@ a {
   overflow: visible;
 }
 
+.brainstorm-grid {
+  grid-template-columns: minmax(0, 1fr) 140px minmax(0, 1fr);
+}
+
 .parallel-column {
   min-width: 0;
   display: flex;
@@ -266,6 +270,46 @@ a {
   min-height: 0;
   overflow: visible;
   padding: 20px 18px 180px;
+}
+
+.brainstorm-transfer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 12px 180px;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+}
+
+.brainstorm-transfer-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.brainstorm-transfer-label,
+.brainstorm-transfer-meta {
+  color: var(--text-faint);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.brainstorm-arrow {
+  width: 52px;
+  height: 52px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 26px;
+  cursor: pointer;
+}
+
+.brainstorm-arrow:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .column-kicker {
@@ -894,6 +938,10 @@ a {
     grid-template-columns: 1fr;
   }
 
+  .brainstorm-grid {
+    grid-template-columns: 1fr;
+  }
+
   .parallel-column {
     border-left: 0;
     border-top: 1px solid var(--border);
@@ -905,6 +953,15 @@ a {
 
   .parallel-column-body {
     padding-bottom: 60px;
+  }
+
+  .brainstorm-transfer {
+    min-height: 120px;
+    padding: 18px 18px 0;
+    border-left: 0;
+    border-right: 0;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
   }
 }
 

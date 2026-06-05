@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { APIKeys, ConversationRound, RoleConfig, RoleResponse, ThinkingLevel } from '../../types/index'
+import type { APIKeys, ConversationRound, RoleConfig, ThinkingLevel } from '../../types/index'
 import SafeMarkdown from '../ui/SafeMarkdown'
 import { TEXT_ATTACHMENT_ACCEPT, useComposerAttachments } from '../ui/useComposerAttachments'
 import { getModelLabel, getProviderLabel } from '../ui/modelLabels'
 import { useProviders, type LiveProvider } from '../ui/useProviders'
+import { streamChatCompletion } from '../../lib/streaming'
 
 const PROVIDER_COLORS: Record<string, string> = {
   openai: '#10a37f',
@@ -34,6 +35,15 @@ const DEFAULT_CONFIGS: Record<string, RoleConfig> = {
   practical: { provider: 'openai', model: 'gpt-5.5', thinkingLevel: 'medium' },
   critical: { provider: 'anthropic', model: 'claude-sonnet-4-6', thinkingLevel: 'medium' },
   creative: { provider: 'gemini', model: 'gemini-3.5-flash', thinkingLevel: 'medium' },
+}
+
+function makeRoleSystem(role: 'practical' | 'critical' | 'creative'): string {
+  const roles = {
+    practical: 'Odpověz jako praktický poradce. Buď konkrétní, realistický a akční. Zaměř se na to, co má uživatel udělat dál. Vyhni se obecným radám a odpovídej v češtině.',
+    critical: 'Odpověz jako kritický oponent. Hledej slabiny, rizika a slepá místa. Buď tvrdý, konkrétní a odpovídej v češtině.',
+    creative: 'Odpověz jako kreativní stratég. Hledej alternativní řešení, nečekané možnosti a nové úhly pohledu. Buď konkrétní a odpovídej v češtině.',
+  }
+  return roles[role]
 }
 
 function RoleSettings({
@@ -214,11 +224,14 @@ function RoleColumn({
 
               <div className="thread-message thread-message-assistant">
                 <div className="thread-message-meta">{role.label}</div>
-                {response.status === 'pending' ? (
-                  <div className="loading-state">
-                    <span className="spinner" />
-                    <span>Připravuji odpověď…</span>
-                  </div>
+                {response.status === 'pending' || response.status === 'loading' ? (
+                  <>
+                    {response.content ? <SafeMarkdown text={response.content} className="thread-message-content" /> : null}
+                    <div className="loading-state">
+                      <span className="spinner" />
+                      <span>Generuji odpověď…</span>
+                    </div>
+                  </>
                 ) : response.status === 'error' ? (
                   <div className="error-msg">{response.error}</div>
                 ) : (
@@ -252,6 +265,7 @@ export default function ThreePerspectives({ apiKeys }: { apiKeys: APIKeys }) {
 
   useEffect(() => {
     if (!providers.length) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setRoleConfigs(previous => {
       const next = { ...previous }
       for (const role of ROLES_CONFIG) {
@@ -308,33 +322,79 @@ export default function ThreePerspectives({ apiKeys }: { apiKeys: APIKeys }) {
     setRounds(previous => [...previous, pendingRound])
 
     try {
-      const response = await fetch('/api/three-answers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: promptWithAttachments, history, roleConfigs, apiKeys }),
-      })
-      if (!response.ok) {
-        const payload = await response.json().catch(() => null) as { error?: string } | null
-        throw new Error(payload?.error ?? 'Server error')
-      }
-      const data: { responses: RoleResponse[] } = await response.json()
-      setRounds(previous =>
-        previous.map(round => (round.id === pendingRound.id ? { ...round, responses: data.responses } : round))
-      )
-    } catch (error) {
-      setRounds(previous =>
-        previous.map(round =>
-          round.id === pendingRound.id
-            ? {
-                ...round,
-                responses: round.responses.map(responseItem => ({
-                  ...responseItem,
-                  status: 'error',
-                  error: error instanceof Error ? error.message : 'Tato odpověď se nepodařila vygenerovat.',
-                })),
-              }
-            : round
-        )
+      await Promise.all(
+        ROLES_CONFIG.map(async role => {
+          const config = roleConfigs[role.key]
+          const personaHistory = history?.filter(h => h.persona === role.key || h.role === 'user') ?? []
+          const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+            { role: 'system', content: makeRoleSystem(role.key as 'practical' | 'critical' | 'creative') },
+            ...personaHistory.map(item => ({ role: item.role, content: item.content })),
+            { role: 'user', content: promptWithAttachments },
+          ]
+
+          try {
+            await streamChatCompletion({
+              messages,
+              modelConfig: config,
+              apiKeys,
+              maxTokens: 520,
+              onDelta: delta => {
+                setRounds(previous =>
+                  previous.map(round =>
+                    round.id !== pendingRound.id
+                      ? round
+                      : {
+                          ...round,
+                          responses: round.responses.map(responseItem =>
+                            responseItem.roleName !== role.key
+                              ? responseItem
+                              : {
+                                  ...responseItem,
+                                  content: `${responseItem.content}${delta}`,
+                                  status: 'loading',
+                                }
+                          ),
+                        }
+                  )
+                )
+              },
+            })
+
+            setRounds(previous =>
+              previous.map(round =>
+                round.id !== pendingRound.id
+                  ? round
+                  : {
+                      ...round,
+                      responses: round.responses.map(responseItem =>
+                        responseItem.roleName !== role.key
+                          ? responseItem
+                          : { ...responseItem, status: 'done', error: null }
+                      ),
+                    }
+              )
+            )
+          } catch (error) {
+            setRounds(previous =>
+              previous.map(round =>
+                round.id !== pendingRound.id
+                  ? round
+                  : {
+                      ...round,
+                      responses: round.responses.map(responseItem =>
+                        responseItem.roleName !== role.key
+                          ? responseItem
+                          : {
+                              ...responseItem,
+                              status: 'error',
+                              error: error instanceof Error ? error.message : 'Tato odpověď se nepodařila vygenerovat.',
+                            }
+                      ),
+                    }
+              )
+            )
+          }
+        })
       )
     } finally {
       setLoading(false)

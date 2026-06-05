@@ -10,6 +10,18 @@ const app = express()
 app.use(express.json())
 const distPath = path.resolve(process.cwd(), 'dist')
 
+function prepareSSE(res: express.Response) {
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+  res.setHeader('Cache-Control', 'no-cache, no-transform')
+  res.setHeader('Connection', 'keep-alive')
+  res.flushHeaders?.()
+}
+
+function writeSSE(res: express.Response, event: string, data: unknown) {
+  res.write(`event: ${event}\n`)
+  res.write(`data: ${JSON.stringify(data)}\n\n`)
+}
+
 function readApiKeys(body: unknown): APIKeys | undefined {
   const value = body as { apiKeys?: APIKeys } | undefined
   if (!value?.apiKeys) return undefined
@@ -152,6 +164,46 @@ app.post('/api/pure-chat', async (req, res) => {
   } catch (err) {
     console.error('pure-chat error:', err)
     res.status(errorStatus(err)).json({ error: errorMessage(err) })
+  }
+})
+
+app.post('/api/pure-chat/stream', async (req, res) => {
+  const { messages, modelConfig, maxTokens } = req.body as {
+    messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>
+    modelConfig: RoleConfig
+    maxTokens?: number
+  }
+  if (!messages?.length) return res.status(400).json({ error: 'Chybí messages' })
+
+  prepareSSE(res)
+
+  try {
+    const p = createProviderFor(modelConfig, readApiKeys(req.body))
+    writeSSE(res, 'start', { providerName: p.name, modelName: modelConfig.model })
+
+    if (p.stream) {
+      for await (const delta of p.stream({
+        messages: messages.map(m => ({ role: m.role, content: m.content })),
+        maxTokens: maxTokens ?? 1500,
+        thinkingLevel: modelConfig.thinkingLevel,
+      })) {
+        writeSSE(res, 'delta', { delta })
+      }
+    } else {
+      const content = await p.generate({
+        messages: messages.map(m => ({ role: m.role, content: m.content })),
+        maxTokens: maxTokens ?? 1500,
+        thinkingLevel: modelConfig.thinkingLevel,
+      })
+      writeSSE(res, 'delta', { delta: content })
+    }
+
+    writeSSE(res, 'done', { providerName: p.name, modelName: modelConfig.model })
+    res.end()
+  } catch (err) {
+    console.error('pure-chat stream error:', err)
+    writeSSE(res, 'error', { error: errorMessage(err) })
+    res.end()
   }
 })
 
@@ -374,41 +426,54 @@ Vrať POUZE validní JSON (bez markdown bloku):
 }`
 
 app.post('/api/council', async (req, res) => {
-  const { prompt, roleConfigs, synthesisConfig } = req.body as {
+  const { prompt, roleConfigs, synthesisConfig, initialResponses: providedInitialResponses } = req.body as {
     prompt: string
     roleConfigs?: Record<string, RoleConfig>
     synthesisConfig?: RoleConfig
+    initialResponses?: Array<{
+      roleName: string
+      roleLabel: string
+      providerName: string
+      modelName: string
+      content: string
+      status: 'done' | 'error' | 'loading' | 'pending'
+      error?: string | null
+    }>
   }
   if (!prompt?.trim()) return res.status(400).json({ error: 'Chybí prompt' })
 
   try {
     const apiKeys = readApiKeys(req.body)
     const councilRoles = Object.entries(COUNCIL_ROLES) as Array<[string, { label: string; system: string }]>
-    const initialResults = await Promise.allSettled(
-      councilRoles.map(([key, config]) => {
-        const cfg = roleConfigs?.[key]
-        const p = cfg ? createProviderFor(cfg, apiKeys) : createProvider(apiKeys)
-        return p.generate({
-          messages: [{ role: 'system', content: config.system }, { role: 'user', content: prompt }],
-          maxTokens: 420,
-          thinkingLevel: cfg?.thinkingLevel,
-        }).then(content => ({ key, label: config.label, content, providerName: p.name, modelName: cfg?.model ?? p.model }))
-      })
-    )
+    const initialResponses = providedInitialResponses?.length
+      ? providedInitialResponses
+      : await (async () => {
+          const initialResults = await Promise.allSettled(
+            councilRoles.map(([key, config]) => {
+              const cfg = roleConfigs?.[key]
+              const p = cfg ? createProviderFor(cfg, apiKeys) : createProvider(apiKeys)
+              return p.generate({
+                messages: [{ role: 'system', content: config.system }, { role: 'user', content: prompt }],
+                maxTokens: 420,
+                thinkingLevel: cfg?.thinkingLevel,
+              }).then(content => ({ key, label: config.label, content, providerName: p.name, modelName: cfg?.model ?? p.model }))
+            })
+          )
 
-    const initialResponses = initialResults.map((r, i) => {
-      const [key, config] = councilRoles[i]
-      const cfg = roleConfigs?.[key]
-      return {
-        roleName: key,
-        roleLabel: config.label,
-        providerName: r.status === 'fulfilled' ? r.value.providerName : (cfg?.provider ?? 'unknown'),
-        modelName: r.status === 'fulfilled' ? r.value.modelName : (cfg?.model ?? ''),
-        content: r.status === 'fulfilled' ? r.value.content : '',
-        status: r.status === 'fulfilled' ? 'done' : 'error',
-        error: r.status === 'fulfilled' ? null : errorMessage(r.reason),
-      }
-    })
+          return initialResults.map((r, i) => {
+            const [key, config] = councilRoles[i]
+            const cfg = roleConfigs?.[key]
+            return {
+              roleName: key,
+              roleLabel: config.label,
+              providerName: r.status === 'fulfilled' ? r.value.providerName : (cfg?.provider ?? 'unknown'),
+              modelName: r.status === 'fulfilled' ? r.value.modelName : (cfg?.model ?? ''),
+              content: r.status === 'fulfilled' ? r.value.content : '',
+              status: r.status === 'fulfilled' ? 'done' : 'error',
+              error: r.status === 'fulfilled' ? null : errorMessage(r.reason),
+            }
+          })
+        })()
 
     const responseSummary = initialResponses
       .map(r => `**${r.roleLabel}:** ${r.status === 'error' ? `(chyba) ${r.error}` : r.content}`)

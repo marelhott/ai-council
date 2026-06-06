@@ -38,11 +38,15 @@ function BrainstormColumn({
   accent,
   modelLabel,
   messages,
+  examples,
+  onExampleClick,
 }: {
   title: string
   accent: string
   modelLabel: string
   messages: BrainstormMessage[]
+  examples?: string[]
+  onExampleClick?: (example: string) => void
 }) {
   const columnRef = useRef<HTMLDivElement>(null)
   const lastMessage = messages[messages.length - 1]
@@ -74,7 +78,18 @@ function BrainstormColumn({
 
       <div className="parallel-column-body" ref={columnRef}>
         {messages.length === 0 ? (
-          <div className="column-empty">Tady se objeví předaný prompt a následná odpověď.</div>
+          <div className="column-empty">
+            <div>Tady se objeví předaný prompt a následná odpověď.</div>
+            {examples && examples.length > 0 && (
+              <div className="example-row" style={{ marginTop: 20, flexDirection: 'column', alignItems: 'flex-start' }}>
+                {examples.map(example => (
+                  <button key={example} type="button" className="example-chip" onClick={() => onExampleClick?.(example)}>
+                    {example}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         ) : (
           messages.map((message, index) => (
             <div key={`${message.speaker}-${index}`} className={`thread-message thread-message-${message.role}`}>
@@ -281,7 +296,14 @@ export default function Brainstorm({ apiKeys }: { apiKeys: APIKeys }) {
       </div>
 
       <div className="parallel-grid brainstorm-grid">
-        <BrainstormColumn title="Levá stopa" accent="#10a37f" modelLabel={leftLabel} messages={relay.leftMessages} />
+        <BrainstormColumn
+          title="Levá stopa"
+          accent="#10a37f"
+          modelLabel={leftLabel}
+          messages={relay.leftMessages}
+          examples={!hasConversation ? BRAINSTORM_EXAMPLES : undefined}
+          onExampleClick={example => setInput(example)}
+        />
 
         <div className="brainstorm-transfer">
           <div className="brainstorm-transfer-inner">
@@ -303,18 +325,6 @@ export default function Brainstorm({ apiKeys }: { apiKeys: APIKeys }) {
 
         <BrainstormColumn title="Pravá stopa" accent="#d97706" modelLabel={rightLabel} messages={relay.rightMessages} />
       </div>
-
-      {!hasConversation && (
-        <div className="empty-state" style={{ paddingTop: 24 }}>
-          <div className="example-row">
-            {BRAINSTORM_EXAMPLES.map(example => (
-              <button key={example} type="button" className="example-chip" onClick={() => setInput(example)}>
-                {example}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
 
       <div className="composer-wrap">
         <div className="composer-shell">

@@ -75,6 +75,8 @@ a {
   height: 100dvh;
   min-height: 100dvh;
   overflow: hidden;
+  max-width: 1600px;
+  margin: 0 auto;
 }
 
 .app-topbar {
@@ -158,6 +160,7 @@ a {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  padding: 0 20px;
 }
 
 .tab-page {
@@ -988,6 +991,10 @@ a {
 }
 
 @media (max-width: 720px) {
+  .app-workspace {
+    padding: 0 8px;
+  }
+
   .app-topbar {
     padding: 0 10px;
   }

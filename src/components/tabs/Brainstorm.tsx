@@ -180,7 +180,7 @@ export default function Brainstorm({ apiKeys }: { apiKeys: APIKeys }) {
         messages: [{ role: 'user', content: prompt }],
         modelConfig,
         apiKeys,
-        maxTokens: 2000,
+        maxTokens: 4000,
         onDelta: delta => {
           setRelay(previous => {
             const messages = [...previous[messageListKey]]

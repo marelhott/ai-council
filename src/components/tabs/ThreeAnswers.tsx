@@ -315,6 +315,7 @@ export default function ThreeAnswers({ apiKeys }: { apiKeys: APIKeys }) {
             messages: [...history, { role: 'user', content: promptWithAttachments }],
             modelConfig: slot.config,
             apiKeys,
+            maxTokens: 4000,
             onDelta: delta => {
               setSlots(previous =>
                 previous.map((currentSlot, slotIndex) => {

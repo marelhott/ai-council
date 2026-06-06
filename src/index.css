@@ -269,7 +269,7 @@ a {
   flex: 1 1 auto;
   min-height: 0;
   overflow: visible;
-  padding: 20px 18px 232px;
+  padding: 28px 34px 232px;
 }
 
 .brainstorm-transfer {
@@ -467,6 +467,7 @@ a {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  max-width: 720px;
 }
 
 .thread-message-meta {
@@ -1011,7 +1012,7 @@ a {
   }
 
   .parallel-column-body {
-    padding: 16px 14px 180px;
+    padding: 18px 18px 180px;
   }
 
   .inline-role-configs {

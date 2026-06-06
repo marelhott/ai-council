@@ -220,7 +220,7 @@ a {
   flex: 1 1 auto;
   min-height: 0;
   overflow: visible;
-  padding: 8px 24px 180px;
+  padding: 8px 24px 232px;
 }
 
 .thread-narrow {
@@ -269,14 +269,14 @@ a {
   flex: 1 1 auto;
   min-height: 0;
   overflow: visible;
-  padding: 20px 18px 180px;
+  padding: 20px 18px 232px;
 }
 
 .brainstorm-transfer {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px 12px 180px;
+  padding: 24px 12px 232px;
   border-left: 1px solid var(--border);
   border-right: 1px solid var(--border);
 }
@@ -541,7 +541,8 @@ a {
   z-index: 20;
   margin-top: auto;
   padding: 16px 24px 24px;
-  background: linear-gradient(to top, var(--bg) 72%, transparent);
+  background: transparent;
+  pointer-events: none;
 }
 
 .composer-shell {
@@ -553,6 +554,7 @@ a {
   background: var(--bg-elevated);
   box-shadow: 0 14px 38px rgba(0, 0, 0, 0.06);
   backdrop-filter: blur(18px);
+  pointer-events: auto;
 }
 
 .hidden-file-input {
@@ -952,12 +954,12 @@ a {
   }
 
   .parallel-column-body {
-    padding-bottom: 60px;
+    padding-bottom: 140px;
   }
 
   .brainstorm-transfer {
     min-height: 120px;
-    padding: 18px 18px 0;
+    padding: 18px 18px 140px;
     border-left: 0;
     border-right: 0;
     border-top: 1px solid var(--border);
@@ -1009,7 +1011,7 @@ a {
   }
 
   .parallel-column-body {
-    padding: 16px 14px 140px;
+    padding: 16px 14px 180px;
   }
 
   .inline-role-configs {

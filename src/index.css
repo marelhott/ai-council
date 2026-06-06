@@ -563,21 +563,27 @@ a {
   left: 0;
   right: 0;
   z-index: 20;
-  padding: 16px 24px 24px;
+  padding: 12px 24px 32px;
   background: transparent;
   pointer-events: none;
 }
 
 .composer-shell {
-  width: min(860px, 100%);
+  width: min(820px, 100%);
   margin: 0 auto;
-  padding: 0 14px;
-  border: 1px solid var(--border-strong);
-  border-radius: 30px;
+  padding: 0 8px 0 18px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
   background: var(--bg-elevated);
-  box-shadow: 0 14px 38px rgba(0, 0, 0, 0.06);
-  backdrop-filter: blur(18px);
+  box-shadow: 0 4px 32px rgba(0, 0, 0, 0.07);
+  backdrop-filter: blur(20px);
   pointer-events: auto;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.composer-shell:focus-within {
+  border-color: var(--border-strong);
+  box-shadow: 0 6px 40px rgba(0, 0, 0, 0.10);
 }
 
 .hidden-file-input {
@@ -588,7 +594,7 @@ a {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  padding-top: 10px;
+  padding: 10px 10px 0;
 }
 
 .attachment-chip {
@@ -601,7 +607,7 @@ a {
 }
 
 .composer-row {
-  min-height: 74px;
+  min-height: 64px;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -641,13 +647,14 @@ a {
   color: var(--text);
   outline: none;
   overflow-y: auto;
-  font-size: 14px;
-  line-height: 1.4;
+  font-size: 15px;
+  line-height: 1.45;
   padding-top: 2px;
 }
 
 .composer-input::placeholder {
   color: var(--text-faint);
+  font-size: 15px;
 }
 
 .composer-controls {
@@ -659,21 +666,30 @@ a {
 }
 
 .composer-submit {
-  width: 38px;
-  height: 38px;
+  width: 42px;
+  height: 42px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border: 0;
   border-radius: 999px;
-  background: var(--text-faint);
-  color: #fff;
+  background: var(--accent);
+  color: var(--bg);
   cursor: pointer;
   flex: 0 0 auto;
+  transition: opacity 120ms ease, transform 80ms ease;
+}
+
+.composer-submit:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.composer-submit:active:not(:disabled) {
+  transform: scale(0.94);
 }
 
 .composer-submit:disabled {
-  opacity: 0.45;
+  opacity: 0.22;
   cursor: not-allowed;
 }
 

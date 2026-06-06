@@ -45,10 +45,20 @@ function BrainstormColumn({
   messages: BrainstormMessage[]
 }) {
   const columnRef = useRef<HTMLDivElement>(null)
+  const lastMessage = messages[messages.length - 1]
 
   useEffect(() => {
-    columnRef.current?.scrollTo({ top: columnRef.current.scrollHeight, behavior: 'smooth' })
-  }, [messages])
+    const el = columnRef.current
+    if (!el) return
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+  }, [messages.length])
+
+  useEffect(() => {
+    const el = columnRef.current
+    if (!el) return
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120
+    if (nearBottom) el.scrollTop = el.scrollHeight
+  }, [lastMessage?.content])
 
   return (
     <section className="parallel-column brainstorm-column">

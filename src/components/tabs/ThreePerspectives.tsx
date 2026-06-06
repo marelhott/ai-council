@@ -180,10 +180,21 @@ function RoleColumn({
   const providerData = providers.find(provider => provider.provider === config.provider)
   const connected = providerData?.source === 'live' && providerData.hasKey
   const columnRef = useRef<HTMLDivElement>(null)
+  const latestRound = rounds[rounds.length - 1]
+  const latestContent = latestRound?.responses.find(r => r.roleName === role.key)?.content
 
   useEffect(() => {
-    columnRef.current?.scrollTo({ top: columnRef.current.scrollHeight, behavior: 'smooth' })
+    const el = columnRef.current
+    if (!el) return
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
   }, [rounds.length])
+
+  useEffect(() => {
+    const el = columnRef.current
+    if (!el) return
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120
+    if (nearBottom) el.scrollTop = el.scrollHeight
+  }, [latestContent])
 
   return (
     <section className="parallel-column">

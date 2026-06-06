@@ -157,15 +157,16 @@ a {
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 .tab-page {
   display: flex;
   flex-direction: column;
   flex: 1;
-  min-height: calc(100dvh - var(--topbar-h));
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 .thread-page-header,
@@ -220,7 +221,8 @@ a {
 .chat-thread {
   flex: 1 1 auto;
   min-height: 0;
-  overflow: visible;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: 8px 24px var(--composer-gap);
 }
 
@@ -238,7 +240,7 @@ a {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .brainstorm-grid {
@@ -250,7 +252,7 @@ a {
   display: flex;
   flex-direction: column;
   border-left: 1px solid var(--border);
-  min-height: 100%;
+  overflow: hidden;
 }
 
 .parallel-column:first-child {
@@ -270,7 +272,8 @@ a {
 .parallel-column-body {
   flex: 1 1 auto;
   min-height: 0;
-  overflow: visible;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: 28px 48px var(--composer-gap) 72px;
 }
 
@@ -278,9 +281,10 @@ a {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px 12px var(--composer-gap);
+  padding: 24px 12px;
   border-left: 1px solid var(--border);
   border-right: 1px solid var(--border);
+  overflow: hidden;
 }
 
 .brainstorm-transfer-inner {
@@ -975,7 +979,7 @@ a {
 
   .brainstorm-transfer {
     min-height: 120px;
-    padding: 18px 18px var(--composer-gap);
+    padding: 18px;
     border-left: 0;
     border-right: 0;
     border-top: 1px solid var(--border);

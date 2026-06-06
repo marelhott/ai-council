@@ -113,6 +113,7 @@ export default function WeakestAssumption({ apiKeys }: { apiKeys: APIKeys }) {
   const [analysisConfig, setAnalysisConfig] = useState<RoleConfig>(DEFAULT_ANALYSIS_CONFIG)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const chatRef = useRef<HTMLDivElement>(null)
   const {
     attachments,
     inputRef: attachmentInputRef,
@@ -133,6 +134,14 @@ export default function WeakestAssumption({ apiKeys }: { apiKeys: APIKeys }) {
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
   }, [turns.length])
+
+  const latestDraft = turns.find(t => t.loading)?.draft ?? ''
+  useEffect(() => {
+    const el = chatRef.current
+    if (!el || !latestDraft) return
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120
+    if (nearBottom) el.scrollTop = el.scrollHeight
+  }, [latestDraft])
 
   useEffect(() => {
     if (!providers.length) return
@@ -220,7 +229,7 @@ export default function WeakestAssumption({ apiKeys }: { apiKeys: APIKeys }) {
         </div>
       </div>
 
-      <div className="chat-thread">
+      <div className="chat-thread" ref={chatRef}>
         <div className="thread-narrow">
           {turns.length === 0 ? (
             <div className="empty-state empty-state-large">

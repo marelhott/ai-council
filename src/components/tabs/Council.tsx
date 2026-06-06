@@ -176,6 +176,7 @@ export default function Council({ apiKeys }: { apiKeys: APIKeys }) {
   const [running, setRunning] = useState(false)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const chatRef = useRef<HTMLDivElement>(null)
   const {
     attachments,
     inputRef: attachmentInputRef,
@@ -217,6 +218,15 @@ export default function Council({ apiKeys }: { apiKeys: APIKeys }) {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
   }, [turns.length])
+
+  const latestStreamLen = turns[turns.length - 1]?.session.initialResponses
+    .reduce((sum, r) => sum + r.content.length, 0) ?? 0
+  useEffect(() => {
+    const el = chatRef.current
+    if (!el || !latestStreamLen) return
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120
+    if (nearBottom) el.scrollTop = el.scrollHeight
+  }, [latestStreamLen])
 
   async function runCouncil() {
     const prompt = input.trim()
@@ -429,7 +439,7 @@ export default function Council({ apiKeys }: { apiKeys: APIKeys }) {
         )}
       </div>
 
-      <div className="chat-thread">
+      <div className="chat-thread" ref={chatRef}>
         <div className="thread-narrow">
           {turns.length === 0 ? (
             <div className="empty-state empty-state-large">

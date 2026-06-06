@@ -182,10 +182,20 @@ function ChatColumn({
   const providerData = providers.find(provider => provider.provider === slot.config.provider)
   const connected = providerData?.source === 'live' && providerData.hasKey
   const columnRef = useRef<HTMLDivElement>(null)
+  const lastMessage = slot.messages[slot.messages.length - 1]
 
   useEffect(() => {
-    columnRef.current?.scrollTo({ top: columnRef.current.scrollHeight, behavior: 'smooth' })
+    const el = columnRef.current
+    if (!el) return
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
   }, [slot.messages.length])
+
+  useEffect(() => {
+    const el = columnRef.current
+    if (!el) return
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120
+    if (nearBottom) el.scrollTop = el.scrollHeight
+  }, [lastMessage?.content])
 
   return (
     <section className="parallel-column">

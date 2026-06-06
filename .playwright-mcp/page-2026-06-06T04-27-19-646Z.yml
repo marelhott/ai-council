@@ -1,0 +1,56 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]: AI Council
+      - generic [ref=e7]: Nenech nápad projít bez odporu.
+    - tablist [ref=e8]:
+      - tab "Tři odpovědi" [selected] [ref=e9] [cursor=pointer]
+      - tab "Brainstorm" [ref=e10] [cursor=pointer]
+      - tab "Tři pohledy" [ref=e11] [cursor=pointer]
+      - tab "AI Council" [ref=e12] [cursor=pointer]
+      - tab "Nejslabší předpoklad" [ref=e13] [cursor=pointer]
+    - button "Otevřít nastavení" [ref=e14] [cursor=pointer]:
+      - img [ref=e15]
+  - generic [ref=e19]:
+    - generic [ref=e21]:
+      - heading "Tři odpovědi" [level=2] [ref=e22]
+      - paragraph [ref=e23]: Jeden prompt, tři paralelní dialogy. Bez rolí a bez zbytečných panelů.
+    - generic [ref=e24]:
+      - generic [ref=e25]:
+        - generic [ref=e26]:
+          - generic [ref=e27]:
+            - generic [ref=e28]: Model 1
+            - generic [ref=e29]:
+              - generic [ref=e31]: OpenAI
+              - generic [ref=e32]: GPT 5.5
+          - generic [ref=e33]:
+            - button "GPT 5.5" [ref=e35] [cursor=pointer]
+            - button "Standard" [ref=e37] [cursor=pointer]
+        - generic [ref=e39]: Tady poběží čistý dialog s tímto modelem.
+      - generic [ref=e40]:
+        - generic [ref=e41]:
+          - generic [ref=e42]:
+            - generic [ref=e43]: Model 2
+            - generic [ref=e44]:
+              - generic [ref=e46]: Claude
+              - generic [ref=e47]: Claude sonnet 4.6
+          - generic [ref=e48]:
+            - button "Claude sonnet 4.6" [ref=e50] [cursor=pointer]
+            - button "Standard" [ref=e52] [cursor=pointer]
+        - generic [ref=e54]: Tady poběží čistý dialog s tímto modelem.
+      - generic [ref=e55]:
+        - generic [ref=e56]:
+          - generic [ref=e57]:
+            - generic [ref=e58]: Model 3
+            - generic [ref=e59]:
+              - generic [ref=e61]: Gemini
+              - generic [ref=e62]: gemini 3.5 flash
+          - generic [ref=e63]:
+            - button "gemini 3.5 flash" [ref=e65] [cursor=pointer]
+            - button "Standard" [ref=e67] [cursor=pointer]
+        - generic [ref=e69]: Tady poběží čistý dialog s tímto modelem.
+    - generic [ref=e71]:
+      - button "Přidat soubor" [ref=e72] [cursor=pointer]: +
+      - textbox "Napiš zprávu pro všechny tři modely…" [ref=e73]
+      - button "Odeslat" [disabled] [ref=e75]:
+        - img [ref=e76]

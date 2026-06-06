@@ -231,7 +231,7 @@ a {
   max-width: 1120px;
   margin: 0 auto;
   min-height: 100%;
-  padding: 0 56px 72px 88px;
+  padding: 16px 56px 72px 56px;
 }
 
 .parallel-grid {
@@ -274,7 +274,7 @@ a {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 28px 48px var(--composer-gap) 72px;
+  padding: 36px 32px var(--composer-gap) 40px;
 }
 
 .brainstorm-transfer {
@@ -1031,11 +1031,11 @@ a {
   }
 
   .parallel-column-body {
-    padding: 18px 22px var(--composer-gap) 28px;
+    padding: 24px 20px var(--composer-gap) 24px;
   }
 
   .thread-narrow {
-    padding: 0 18px 56px 28px;
+    padding: 12px 20px 56px 24px;
   }
 
   .inline-role-configs {

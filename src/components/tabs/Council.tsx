@@ -266,7 +266,7 @@ export default function Council({ apiKeys }: { apiKeys: APIKeys }) {
               ],
               modelConfig: config,
               apiKeys,
-              maxTokens: 420,
+              maxTokens: 1800,
               onDelta: delta => {
                 const current = collectedInitialResponses.find(response => response.roleName === role.key)
                 if (current) {

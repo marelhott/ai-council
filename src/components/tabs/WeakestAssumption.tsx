@@ -170,7 +170,7 @@ export default function WeakestAssumption({ apiKeys }: { apiKeys: APIKeys }) {
         ],
         modelConfig: analysisConfig,
         apiKeys,
-        maxTokens: 700,
+        maxTokens: 2000,
         onDelta: delta => {
           setTurns(previous =>
             previous.map(turn =>

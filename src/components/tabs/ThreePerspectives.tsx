@@ -348,7 +348,7 @@ export default function ThreePerspectives({ apiKeys }: { apiKeys: APIKeys }) {
               messages,
               modelConfig: config,
               apiKeys,
-              maxTokens: 520,
+              maxTokens: 2000,
               onDelta: delta => {
                 setRounds(previous =>
                   previous.map(round =>

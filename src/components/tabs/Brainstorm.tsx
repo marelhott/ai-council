@@ -258,9 +258,18 @@ export default function Brainstorm({ apiKeys }: { apiKeys: APIKeys }) {
     const latestResponse = [...sourceMessages].reverse().find(message => message.role === 'assistant' && message.status === 'done' && message.content.trim())
     if (!latestResponse) return
 
+    // Find the original user prompt that preceded this response so the second
+    // model has full context — not just the raw output of the first model.
+    const lastUserMessage = [...sourceMessages].reverse().find(m => m.role === 'user')
+    const sourceLabel = relay.transferFrom === 'left' ? leftLabel : rightLabel
+
+    const contextPrompt = lastUserMessage
+      ? `Původní zadání:\n${lastUserMessage.content}\n\nOdpověď ${sourceLabel}:\n${latestResponse.content}\n\nReaguj na tuto odpověď. Vylepši ji, rozvij nebo kriticky oponuj — a navrhni konkrétní zlepšení.`
+      : latestResponse.content
+
     setRunning(true)
     try {
-      await runOnSide(relay.transferFrom === 'left' ? 'right' : 'left', latestResponse.content)
+      await runOnSide(relay.transferFrom === 'left' ? 'right' : 'left', contextPrompt)
     } finally {
       setRunning(false)
     }

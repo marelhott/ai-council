@@ -29,7 +29,12 @@ function readApiKeys(body: unknown): APIKeys | undefined {
 }
 
 function errorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) return error.message
+  if (error instanceof Error && error.message) {
+    if (error.message.includes('credit balance is too low')) {
+      return 'Anthropic klíč je nalezený, ale účet nemá dostatečný kredit pro generování. Doplň kredit v Anthropic billing, nebo pro tento režim vyber jiný provider.'
+    }
+    return error.message
+  }
   return 'Generování se nezdařilo.'
 }
 

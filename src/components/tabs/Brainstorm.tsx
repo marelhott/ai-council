@@ -159,7 +159,7 @@ export default function Brainstorm({ apiKeys }: { apiKeys: APIKeys }) {
     return ''
   }, [leftLabel, relay.transferFrom, rightLabel])
 
-  async function runOnSide(side: Side, prompt: string) {
+  async function runOnSide(side: Side, prompt: string, retryTransferFrom: Side | null = null) {
     const modelConfig = side === 'left' ? LEFT_CONFIG : RIGHT_CONFIG
     const speakerLabel = side === 'left' ? leftLabel : rightLabel
     const speaker = side === 'left' ? 'openai' : 'anthropic'
@@ -229,7 +229,12 @@ export default function Brainstorm({ apiKeys }: { apiKeys: APIKeys }) {
           status: 'error',
           error: error instanceof Error ? error.message : 'Nepodařilo se vygenerovat odpověď.',
         }
-        return { ...previous, [messageListKey]: messages }
+        return {
+          ...previous,
+          [messageListKey]: messages,
+          transferFrom: retryTransferFrom,
+          nextTarget: side,
+        }
       })
     }
   }
@@ -269,7 +274,7 @@ export default function Brainstorm({ apiKeys }: { apiKeys: APIKeys }) {
 
     setRunning(true)
     try {
-      await runOnSide(relay.transferFrom === 'left' ? 'right' : 'left', contextPrompt)
+      await runOnSide(relay.transferFrom === 'left' ? 'right' : 'left', contextPrompt, relay.transferFrom)
     } finally {
       setRunning(false)
     }

@@ -375,6 +375,7 @@ a {
   top: calc(100% + 10px);
   right: 0;
   width: min(320px, calc(100vw - 36px));
+  max-height: min(520px, calc(100vh - 220px));
   padding: 12px;
   border: 1px solid var(--border-strong);
   border-radius: 14px;
@@ -383,6 +384,8 @@ a {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   z-index: 10;
 }
 
@@ -404,6 +407,7 @@ a {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-height: 0;
 }
 
 .menu-option {
@@ -759,6 +763,8 @@ a {
 .error-msg {
   color: var(--danger);
   font-size: 13px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .analysis-flow {

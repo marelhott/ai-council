@@ -27,7 +27,7 @@ export default function SettingsPanel({ apiKeys, open, providers, onClose, onSav
         <div className="settings-header">
           <div>
             <h3>Nastavení</h3>
-            <p>Pro deploy verzi patří produkční klíče do Vercel env. Tohle pole slouží jako lokální override pro rychlé testování.</p>
+            <p>Pro deploy verzi patří produkční klíče do Vercel env. Stav říká jen to, že klíč existuje; billing a limity se ověří až při generování.</p>
           </div>
           <button type="button" className="icon-button" onClick={onClose} aria-label="Zavřít nastavení">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -47,7 +47,7 @@ export default function SettingsPanel({ apiKeys, open, providers, onClose, onSav
                   <span>{LABELS[key]}</span>
                   <span className={`connection-status ${connected ? 'connected' : 'disconnected'}`}>
                     <span className="provider-dot" />
-                    {connected ? 'Připojeno' : provider?.hasKey ? 'Uloženo, ale neověřeno' : 'Bez klíče'}
+                    {connected ? 'Klíč nalezen' : provider?.hasKey ? 'Uloženo, ale neověřeno' : 'Bez klíče'}
                   </span>
                 </div>
                 <input

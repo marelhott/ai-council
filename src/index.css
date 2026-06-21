@@ -977,6 +977,9 @@ a {
 @media (max-width: 1100px) {
   .parallel-grid {
     grid-template-columns: 1fr;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-bottom: var(--composer-gap);
   }
 
   .brainstorm-grid {
@@ -986,6 +989,7 @@ a {
   .parallel-column {
     border-left: 0;
     border-top: 1px solid var(--border);
+    min-height: 360px;
   }
 
   .parallel-column:first-child {
